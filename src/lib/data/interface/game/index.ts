@@ -1,0 +1,162 @@
+// ---------------------------------------------------------------------------
+// Entity types (mirrors Go model structs)
+// ---------------------------------------------------------------------------
+
+export interface IGame {
+	id: number;
+	createdAt: string;
+	deletedAt: string | null;
+	name: string;
+	description: string | null;
+	creatorId: number;
+	difficulty: string | null;
+	isPublic: boolean | null;
+	likes: number | null;
+	playCount: number | null;
+}
+
+export interface IGameImage {
+	id: number;
+	createdAt: string;
+	deletedAt: string | null;
+	gameId: number;
+	name: string | null;
+	imageUrl: string;
+	thumbnailUrl: string | null;
+	answer: string;
+	hint: string | null;
+	gridSize: number;
+	orderIndex: number;
+	timeLimit: number | null;
+	maxReveal: number | null;
+}
+
+export interface IGameSession {
+	id: number;
+	createdAt: string;
+	deletedAt: string | null;
+	userId: number;
+	gameId: number;
+	currentImageIndex: number;
+	revealedTiles: number[];
+	undoStack: number[][];
+	score: number | null;
+	isFinished: boolean | null;
+}
+
+// ---------------------------------------------------------------------------
+// Request / response shapes (mirrors Go pkg/request_model & pkg/response_model)
+// ---------------------------------------------------------------------------
+
+export interface IRequestPaginate<T> {
+	search: T;
+	page: number;
+	limit: number;
+}
+
+export interface ISingleResponse<T> {
+	doc: T;
+	status: string;
+	message?: string;
+}
+
+export interface IPaginateResponse<T> {
+	docs: T[];
+	status: string;
+	pages: number;
+	total: number;
+}
+
+export interface IListResponse<T> {
+	docs: T[];
+	status: string;
+}
+
+export interface IStatusResponse {
+	status: string;
+	error?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Search / filter payloads (mirrors Go dto/request_search.go)
+// ---------------------------------------------------------------------------
+
+export interface ISearchGames {
+	search?: string;
+	difficulty?: string;
+	creatorId?: number;
+	isPublic?: boolean;
+}
+
+export interface ISearchImages {
+	search?: string;
+	gameId?: number;
+}
+
+export interface ISearchGameSessions {
+	userId?: number;
+	gameId?: number;
+	isFinished?: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Create / update request bodies
+// ---------------------------------------------------------------------------
+
+export interface ICreateGameRequest {
+	name: string;
+	description?: string;
+	creatorId: number;
+	difficulty?: string;
+	isPublic?: boolean;
+}
+
+export interface IUpdateGameRequest {
+	name?: string;
+	description?: string;
+	difficulty?: string;
+	isPublic?: boolean;
+}
+
+export interface ICreateImageRequest {
+	gameId: number;
+	imageUrl: string;
+	answer: string;
+	gridSize: number;
+	orderIndex: number;
+	name?: string;
+	thumbnailUrl?: string;
+	hint?: string;
+	timeLimit?: number;
+	maxReveal?: number;
+}
+
+export interface IUpdateImageRequest {
+	name?: string;
+	imageUrl?: string;
+	thumbnailUrl?: string;
+	answer?: string;
+	hint?: string;
+	gridSize?: number;
+	orderIndex?: number;
+	timeLimit?: number;
+	maxReveal?: number;
+}
+
+export interface ICreateSessionRequest {
+	userId: number;
+	gameId: number;
+	currentImageIndex?: number;
+	revealedTiles?: number[];
+	undoStack?: number[][];
+	score?: number;
+	isFinished?: boolean;
+}
+
+export interface IUpdateSessionRequest {
+	currentImageIndex?: number;
+	revealedTiles?: number[];
+	undoStack?: number[][];
+	score?: number;
+	isFinished?: boolean;
+}

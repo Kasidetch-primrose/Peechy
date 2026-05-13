@@ -1,0 +1,106 @@
+/*
+ * tokens.css
+ * Global CSS custom properties generated from Peechy design tokens.
+ * Import once in your root layout (+layout.svelte or app.html).
+ *
+ * Usage:
+ *   background-color: var(--color-primary-500);
+ *   border-radius: var(--radii-lg);
+ *   padding: var(--spacing-md);
+ */
+
+:root {
+	/* ── Primary (Peach) ─────────────────────────────────────────── */
+	--color-primary-100: #ffe5dc;
+	--color-primary-400: #ffb199;
+	--color-primary-500: #ff9b73;
+	--color-primary-600: #e87c5a;
+
+	/* ── Secondary ───────────────────────────────────────────────── */
+	--color-secondary-yellow: #ffd166;
+	--color-secondary-green: #6bcb77;
+	--color-secondary-blue: #4d96ff;
+
+	/* ── Neutral / Gray ──────────────────────────────────────────── */
+	--color-gray-100: #f3f4f6;
+	--color-gray-200: #e5e7eb;
+	--color-gray-400: #9ca3af;
+	--color-gray-700: #4b5563;
+	--color-gray-900: #1f2937;
+	--color-white: #ffffff;
+
+	/* ── Semantic ────────────────────────────────────────────────── */
+	--color-success: #6bcb77;
+	--color-error: #ff6b6b;
+	--color-warning: #ffd166;
+	--color-info: #4d96ff;
+
+	/* ── Button ──────────────────────────────────────────────────── */
+	--color-btn-primary: #ff9b73;
+	--color-btn-primary-hover: #ffb199;
+	--color-btn-primary-active: #e87c5a;
+	--color-btn-primary-disabled: #ffd8cc;
+	--color-btn-primary-text: #ffffff;
+
+	--color-btn-secondary-bg: #ffffff;
+	--color-btn-secondary-border: #ff9b73;
+	--color-btn-secondary-text: #ff9b73;
+	--color-btn-secondary-hover: #ffe5dc;
+	--color-btn-secondary-active: #ffb199;
+
+	--color-btn-ghost-text: #ff9b73;
+	--color-btn-ghost-hover: #ffe5dc;
+
+	/* ── Focus ring ──────────────────────────────────────────────── */
+	--color-focus: #ffb199;
+
+	/* ── Spacing ─────────────────────────────────────────────────── */
+	--spacing-2xs: 0.125rem; /*  2px */
+	--spacing-xs: 0.25rem; /*  4px */
+	--spacing-sm: 0.5rem; /*  8px */
+	--spacing-md: 1rem; /* 16px */
+	--spacing-lg: 1.5rem; /* 24px */
+	--spacing-xl: 2rem; /* 32px */
+	--spacing-2xl: 3rem; /* 48px */
+	--spacing-3xl: 4rem; /* 64px */
+
+	/* ── Border Radius ───────────────────────────────────────────── */
+	--radii-none: 0px;
+	--radii-sm: 0.375rem; /*  6px */
+	--radii-md: 0.75rem; /* 12px */
+	--radii-lg: 1rem; /* 16px */
+	--radii-xl: 1.25rem; /* 20px */
+	--radii-2xl: 1.5rem; /* 24px */
+	--radii-full: 9999px;
+
+	/* ── Typography ──────────────────────────────────────────────── */
+	--font-sans: 'Noto Sans Thai', 'Inter', ui-sans-serif, system-ui, sans-serif;
+	--font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+
+	--text-xs: 0.75rem;
+	--text-sm: 0.875rem;
+	--text-base: 1rem;
+	--text-lg: 1.125rem;
+	--text-xl: 1.25rem;
+	--text-2xl: 1.5rem;
+	--text-3xl: 1.875rem;
+	--text-4xl: 2.25rem;
+	--text-5xl: 3rem;
+
+	--font-normal: 400;
+	--font-medium: 500;
+	--font-semibold: 600;
+	--font-bold: 700;
+
+	--leading-tight: 1.25;
+	--leading-snug: 1.375;
+	--leading-normal: 1.5;
+	--leading-relaxed: 1.75;
+	--leading-loose: 2;
+}
+
+/* ── Global focus ring ───────────────────────────────────────────────────── */
+:focus-visible {
+	outline: 2px solid var(--color-focus);
+	outline-offset: 2px;
+}

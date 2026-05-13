@@ -1,0 +1,96 @@
+@import 'tailwindcss';
+@plugin '@tailwindcss/typography';
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * Peechy Design Tokens — Tailwind v4 @theme
+ * All tokens below become Tailwind utility classes automatically.
+ * See doc/styling.md for full usage guide.
+ * ───────────────────────────────────────────────────────────────────────────── */
+@theme {
+	/* ── Primary (Peach Brand) ─────────────────────────────────────────────
+	 * Utilities: bg-primary-*, text-primary-*, border-primary-*,
+	 *            ring-primary-*, fill-primary-*, stroke-primary-*
+	 * ─────────────────────────────────────────────────────────────────── */
+	--color-primary-100: #ffe5dc;
+	--color-primary-400: #ffb199;
+	--color-primary-500: #ff9b73;
+	--color-primary-600: #e87c5a;
+
+	/* ── Secondary (Support / Fun) ─────────────────────────────────────────
+	 * Utilities: bg-secondary-yellow, text-secondary-green, etc.
+	 * ─────────────────────────────────────────────────────────────────── */
+	--color-secondary-yellow: #ffd166;
+	--color-secondary-green: #6bcb77;
+	--color-secondary-blue: #4d96ff;
+
+	/* ── Neutral / Gray ────────────────────────────────────────────────────
+	 * Utilities: bg-gray-*, text-gray-*, border-gray-*
+	 * ─────────────────────────────────────────────────────────────────── */
+	--color-gray-100: #f3f4f6;
+	--color-gray-200: #e5e7eb;
+	--color-gray-400: #9ca3af;
+	--color-gray-700: #4b5563;
+	--color-gray-900: #1f2937;
+
+	/* ── Semantic ──────────────────────────────────────────────────────────
+	 * Utilities: bg-success, text-error, border-warning, bg-info
+	 * ─────────────────────────────────────────────────────────────────── */
+	--color-success: #6bcb77;
+	--color-error: #ff6b6b;
+	--color-warning: #ffd166;
+	--color-info: #4d96ff;
+
+	/* ── Button State Colors ───────────────────────────────────────────────
+	 * Utilities: bg-btn-primary, bg-btn-primary-hover, etc.
+	 * (Use these with Tailwind's arbitrary value or CSS vars for hover state variants)
+	 * ─────────────────────────────────────────────────────────────────── */
+	--color-btn-primary: #ff9b73;
+	--color-btn-primary-hover: #ffb199;
+	--color-btn-primary-active: #e87c5a;
+	--color-btn-primary-disabled: #ffd8cc;
+
+	--color-btn-secondary-border: #ff9b73;
+	--color-btn-secondary-hover: #ffe5dc;
+	--color-btn-secondary-active: #ffb199;
+
+	--color-btn-ghost-hover: #ffe5dc;
+
+	/* ── Focus Ring ────────────────────────────────────────────────────────
+	 * Utilities: ring-focus, outline-focus
+	 * ─────────────────────────────────────────────────────────────────── */
+	--color-focus: #ffb199;
+
+	/* ── Font Families ─────────────────────────────────────────────────────
+	 * Utilities: font-sans, font-mono
+	 * ─────────────────────────────────────────────────────────────────── */
+	--font-sans: 'Noto Sans Thai', 'Inter', ui-sans-serif, system-ui, sans-serif;
+	--font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+
+	/* ── Border Radius ─────────────────────────────────────────────────────
+	 * Utilities: rounded-sm, rounded-md, rounded-lg, rounded-xl, rounded-2xl
+	 * ─────────────────────────────────────────────────────────────────── */
+	--radius-sm: 0.375rem; /*  6px */
+	--radius-md: 0.75rem; /* 12px */
+	--radius-lg: 1rem; /* 16px */
+	--radius-xl: 1.25rem; /* 20px */
+	--radius-2xl: 1.5rem; /* 24px */
+
+	/* ── Spacing ───────────────────────────────────────────────────────────
+	 * Utilities: p-*, m-*, gap-*, w-*, h-*, space-*, etc.
+	 * e.g. p-sm, mx-lg, gap-md
+	 * ─────────────────────────────────────────────────────────────────── */
+	--spacing-2xs: 0.125rem; /*  2px */
+	--spacing-xs: 0.25rem; /*  4px */
+	--spacing-sm: 0.5rem; /*  8px */
+	--spacing-md: 1rem; /* 16px */
+	--spacing-lg: 1.5rem; /* 24px */
+	--spacing-xl: 2rem; /* 32px */
+	--spacing-2xl: 3rem; /* 48px */
+	--spacing-3xl: 4rem; /* 64px */
+}
+
+/* ── Global focus ring ──────────────────────────────────────────────────────── */
+:focus-visible {
+	outline: 2px solid var(--color-focus);
+	outline-offset: 2px;
+}
