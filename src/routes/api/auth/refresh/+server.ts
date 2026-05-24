@@ -13,6 +13,14 @@ export const POST: RequestHandler = async ({ request }) => {
 		const result = await refreshAccessToken(refreshToken);
 		return json({ status: 'success', ...result });
 	} catch (e) {
-		return json({ status: 'error', message: (e as Error).message }, { status: 401 });
+		const message = (e as Error).message;
+		const status =
+			message === 'Invalid or expired refresh token' ||
+			message === 'User not found' ||
+			message === 'Refresh token revoked'
+				? 401
+				: 500;
+
+		return json({ status: 'error', message }, { status });
 	}
 };

@@ -43,7 +43,7 @@
 		<span class="text-5xl">😕</span>
 		<p class="text-base font-medium text-gray-700">{$gameDetailStore.error}</p>
 		<button
-			onclick={() => history.back()}
+			onclick={() => goto('/')}
 			class="rounded-lg bg-primary-500 px-5 py-2 text-sm font-medium text-white hover:bg-primary-400"
 		>
 			ย้อนกลับ
@@ -59,7 +59,7 @@
 				<!-- ! Back + actions row -->
 				<div class="mb-4 flex items-center justify-between">
 					<button
-						onclick={() => history.back()}
+						onclick={() => goto('/')}
 						class="flex items-center gap-1.5 text-sm text-gray-500 transition-colors hover:text-gray-800"
 					>
 						<svg
@@ -238,7 +238,7 @@
 				<!-- ! Play button -->
 				<div class="mt-5">
 					<button
-						onclick={() => goto(`/game/${game!.id}/play`)}
+						onclick={() => goto(`/game/play/${game!.id}`)}
 						disabled={images.length === 0}
 						class="rounded-xl bg-primary-500 px-8 py-3 text-base font-semibold text-white shadow-sm transition-colors hover:bg-primary-400 active:bg-primary-600 disabled:cursor-not-allowed disabled:bg-btn-primary-disabled"
 					>
@@ -273,7 +273,7 @@
 					</div>
 
 					<!-- ! Active image meta -->
-					<div class="flex flex-wrap items-start justify-between gap-4 p-4">
+					<!-- <div class="flex flex-wrap items-start justify-between gap-4 p-4">
 						<div class="flex flex-col gap-1">
 							<span class="text-xs font-medium text-gray-400">คำตอบ</span>
 							<span class="text-lg font-bold text-gray-900"
@@ -311,10 +311,10 @@
 								</div>
 							{/if}
 						</div>
-					</div>
+					</div> -->
 
 					<!-- ! Prev / Next -->
-					{#if images.length > 1}
+					<!-- {#if images.length > 1}
 						<div class="flex items-center justify-between border-t border-gray-100 px-4 py-3">
 							<button
 								onclick={() => setActiveImage(Math.max(0, $gameDetailStore.activeImageIdx - 1))}
@@ -361,7 +361,7 @@
 								</svg>
 							</button>
 						</div>
-					{/if}
+					{/if} -->
 				</div>
 
 				<!-- ! Thumbnail strip -->

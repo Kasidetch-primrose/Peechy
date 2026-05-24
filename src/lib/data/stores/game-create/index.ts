@@ -32,6 +32,11 @@ interface GameCreateState {
 	loadingEdit: boolean;
 	submitting: boolean;
 	submitError: string;
+	thumbnailPreview: string;
+	thumbnailUrl: string;
+	thumbnailKey: string;
+	thumbnailStatus: UploadStatus;
+	thumbnailError: string;
 }
 
 // ── Store ──────────────────────────────────────────────────────────────────────
@@ -44,7 +49,12 @@ const initial: GameCreateState = {
 	pendingDeletes: [],
 	loadingEdit: false,
 	submitting: false,
-	submitError: ''
+	submitError: '',
+	thumbnailPreview: '',
+	thumbnailUrl: '',
+	thumbnailKey: '',
+	thumbnailStatus: 'idle',
+	thumbnailError: ''
 };
 
 export const gameCreateStore = writable<GameCreateState>({
@@ -72,7 +82,12 @@ export async function loadEditData(id: number) {
 				gameName: g.name,
 				description: g.description ?? '',
 				difficulty: g.difficulty ?? '',
-				isPublic: g.isPublic ?? true
+				isPublic: g.isPublic ?? true,
+				thumbnailPreview: g.thumbnailUrl ?? '',
+				thumbnailUrl: g.thumbnailUrl ?? '',
+				thumbnailKey: '',
+				thumbnailStatus: g.thumbnailUrl ? 'done' : 'idle',
+				thumbnailError: ''
 			}));
 		}
 		if (imagesRes.status === 'success') {
@@ -234,6 +249,56 @@ export async function handleFilePick(slotId: string, e: Event) {
 	}
 }
 
+export async function handleThumbnailPick(e: Event) {
+	const input = e.target as HTMLInputElement;
+	const file = input.files?.[0];
+	if (!file) return;
+
+	const { thumbnailPreview } = get(gameCreateStore);
+	if (thumbnailPreview.startsWith('blob:')) URL.revokeObjectURL(thumbnailPreview);
+	const previewUrl = URL.createObjectURL(file);
+
+	gameCreateStore.update((s) => ({
+		...s,
+		thumbnailPreview: previewUrl,
+		thumbnailStatus: 'uploading',
+		thumbnailError: ''
+	}));
+
+	try {
+		const fd = new FormData();
+		fd.append('file', file);
+		const res = await fetch('/api/upload-image', { method: 'POST', body: fd });
+		const data: { status: string; key?: string; url?: string; error?: string } = await res.json();
+		if (data.status !== 'success') throw new Error(data.error ?? 'อัพโหลดล้มเหลว');
+		gameCreateStore.update((s) => ({
+			...s,
+			thumbnailUrl: data.url!,
+			thumbnailKey: data.key!,
+			thumbnailStatus: 'done'
+		}));
+	} catch (err) {
+		gameCreateStore.update((s) => ({
+			...s,
+			thumbnailStatus: 'error',
+			thumbnailError: (err as Error).message
+		}));
+	}
+}
+
+export function removeThumbnail() {
+	const { thumbnailPreview } = get(gameCreateStore);
+	if (thumbnailPreview.startsWith('blob:')) URL.revokeObjectURL(thumbnailPreview);
+	gameCreateStore.update((s) => ({
+		...s,
+		thumbnailPreview: '',
+		thumbnailUrl: '',
+		thumbnailKey: '',
+		thumbnailStatus: 'idle',
+		thumbnailError: ''
+	}));
+}
+
 export function moveUp(idx: number) {
 	const { slots } = get(gameCreateStore);
 	if (idx === 0) return;
@@ -266,14 +331,10 @@ export async function handleSubmit(e: SubmitEvent, editId: number | null) {
 	e.preventDefault();
 	gameCreateStore.update((s) => ({ ...s, submitError: '' }));
 
-	const { gameName, description, difficulty, isPublic, slots, pendingDeletes } =
+	const { gameName, description, difficulty, isPublic, slots, pendingDeletes, thumbnailUrl } =
 		get(gameCreateStore);
 	const user = get(authUserStore).user;
 
-	if (!user) {
-		gameCreateStore.update((s) => ({ ...s, submitError: 'กรุณาเข้าสู่ระบบก่อน' }));
-		return;
-	}
 	if (!gameName.trim()) {
 		gameCreateStore.update((s) => ({ ...s, submitError: 'กรุณากรอกชื่อเกม' }));
 		return;
@@ -312,7 +373,8 @@ export async function handleSubmit(e: SubmitEvent, editId: number | null) {
 				name: gameName.trim(),
 				description: description.trim() || undefined,
 				difficulty: difficulty || undefined,
-				isPublic
+				isPublic,
+				thumbnailUrl: thumbnailUrl || undefined
 			});
 			if (res.status !== 'success') throw new Error(res.error ?? 'ไม่สามารถบันทึกเกมได้');
 			gameId = editId;
@@ -320,9 +382,10 @@ export async function handleSubmit(e: SubmitEvent, editId: number | null) {
 			const res = await GameService.create({
 				name: gameName.trim(),
 				description: description.trim() || undefined,
-				creatorId: user.id,
+				creatorId: user?.id ?? null,
 				difficulty: difficulty || undefined,
-				isPublic
+				isPublic,
+				thumbnailUrl: thumbnailUrl || undefined
 			});
 			if (res.status !== 'success') throw new Error(res.error ?? 'ไม่สามารถสร้างเกมได้');
 			gameId = res.doc.id;

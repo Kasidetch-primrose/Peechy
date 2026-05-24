@@ -1,5 +1,6 @@
 import { db } from '$lib/server/db';
 import { games } from '$lib/server/db/GamesModel';
+import { userGameLikes } from '$lib/server/db/UserModel';
 import { eq, isNull, ilike, and, inArray, sql, desc } from 'drizzle-orm';
 
 // ---------------------------------------------------------------------------
@@ -9,9 +10,10 @@ import { eq, isNull, ilike, and, inArray, sql, desc } from 'drizzle-orm';
 export type CreateGameData = {
 	name: string;
 	description?: string;
-	creatorId: number;
+	creatorId: number | null;
 	difficulty?: string;
 	isPublic?: boolean;
+	thumbnailUrl?: string;
 };
 
 export type UpdateGameData = Partial<Omit<CreateGameData, 'creatorId'>>;
@@ -21,6 +23,7 @@ export type PaginateGamesPayload = {
 	difficulty?: string;
 	creatorId?: number;
 	isPublic?: boolean;
+	viewerUserId?: number;
 	page?: number;
 	limit?: number;
 };
@@ -85,8 +88,28 @@ export async function paginate(payload: PaginateGamesPayload) {
 		.limit(limit)
 		.offset(offset);
 
+	let itemsWithLiked = items.map((item) => ({ ...item, isLiked: false }));
+
+	if (payload.viewerUserId && items.length > 0) {
+		const likedRows = await db
+			.select({ gameId: userGameLikes.gameId })
+			.from(userGameLikes)
+			.where(
+				and(
+					eq(userGameLikes.userId, payload.viewerUserId),
+					inArray(
+						userGameLikes.gameId,
+						items.map((item) => item.id)
+					)
+				)
+			);
+
+		const likedSet = new Set(likedRows.map((row) => row.gameId));
+		itemsWithLiked = items.map((item) => ({ ...item, isLiked: likedSet.has(item.id) }));
+	}
+
 	const pages = Math.ceil(total / limit) || 1;
-	return { items, total, pages };
+	return { items: itemsWithLiked, total, pages };
 }
 
 export async function listAll() {
@@ -95,4 +118,48 @@ export async function listAll() {
 		.from(games)
 		.where(isNull(games.deletedAt))
 		.orderBy(games.name);
+}
+
+export async function incrementPlayCount(id: number) {
+	const [updated] = await db
+		.update(games)
+		.set({ playCount: sql`coalesce(${games.playCount}, 0) + 1` })
+		.where(and(eq(games.id, id), isNull(games.deletedAt)))
+		.returning({ id: games.id, playCount: games.playCount });
+
+	return updated ?? null;
+}
+
+export async function toggleLike(gameId: number, userId: number) {
+	const existing = await db
+		.select({ gameId: userGameLikes.gameId })
+		.from(userGameLikes)
+		.where(and(eq(userGameLikes.gameId, gameId), eq(userGameLikes.userId, userId)))
+		.limit(1);
+
+	const hasLiked = existing.length > 0;
+
+	if (hasLiked) {
+		await db
+			.delete(userGameLikes)
+			.where(and(eq(userGameLikes.gameId, gameId), eq(userGameLikes.userId, userId)));
+
+		const [updated] = await db
+			.update(games)
+			.set({ likes: sql`greatest(coalesce(${games.likes}, 0) - 1, 0)` })
+			.where(and(eq(games.id, gameId), isNull(games.deletedAt)))
+			.returning({ likes: games.likes });
+
+		return { liked: false, likes: updated?.likes ?? 0 };
+	}
+
+	await db.insert(userGameLikes).values({ gameId, userId }).onConflictDoNothing();
+
+	const [updated] = await db
+		.update(games)
+		.set({ likes: sql`coalesce(${games.likes}, 0) + 1` })
+		.where(and(eq(games.id, gameId), isNull(games.deletedAt)))
+		.returning({ likes: games.likes });
+
+	return { liked: true, likes: updated?.likes ?? 1 };
 }

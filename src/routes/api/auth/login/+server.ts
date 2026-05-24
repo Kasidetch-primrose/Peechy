@@ -13,6 +13,10 @@ export const POST: RequestHandler = async ({ request }) => {
 		const result = await login(email, password);
 		return json({ status: 'success', ...result });
 	} catch (e) {
-		return json({ status: 'error', message: (e as Error).message }, { status: 401 });
+		const message = (e as Error).message;
+		const status =
+			message === 'Invalid credentials' || message.includes('not verified') ? 401 : 500;
+
+		return json({ status: 'error', message }, { status });
 	}
 };

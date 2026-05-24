@@ -58,8 +58,29 @@ export default class GameService {
 		return res.json();
 	}
 
-	static async listAll(): Promise<IListResponse<Pick<IGame, 'id' | 'name' | 'difficulty'>> & IStatusResponse> {
+	static async listAll(): Promise<
+		IListResponse<Pick<IGame, 'id' | 'name' | 'difficulty'>> & IStatusResponse
+	> {
 		const res = await fetch('/api/games/list');
+		return res.json();
+	}
+
+	static async incrementPlayCount(id: number): Promise<IStatusResponse> {
+		const res = await fetch(`/api/games/${id}/play`, {
+			method: 'POST'
+		});
+		return res.json();
+	}
+
+	static async toggleLike(
+		gameId: number,
+		userId: number
+	): Promise<IStatusResponse & { liked?: boolean; likes?: number }> {
+		const res = await fetch(`/api/games/${gameId}/like`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ userId })
+		});
 		return res.json();
 	}
 }

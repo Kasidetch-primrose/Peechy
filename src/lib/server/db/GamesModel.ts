@@ -6,13 +6,12 @@ export const games = pgTable('games', {
 	...baseColumns,
 	name: varchar('name', { length: 255 }).notNull(),
 	description: text('description'),
-	creatorId: integer('creator_id')
-		.notNull()
-		.references(() => users.id),
+	creatorId: integer('creator_id').references(() => users.id),
 	difficulty: varchar('difficulty', { length: 50 }),
 	isPublic: boolean('is_public').default(true),
 	likes: integer('likes').default(0),
-	playCount: integer('play_count').default(0)
+	playCount: integer('play_count').default(0),
+	thumbnailUrl: text('thumbnail_url')
 });
 
 export const gameSessions = pgTable('game_sessions', {

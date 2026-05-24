@@ -1,0 +1,122 @@
+@import 'tailwindcss';
+@plugin '@tailwindcss/typography';
+
+:root {
+	--color-a: #fae7eb;
+	--color-b: #e0d4e7;
+	--color-c: #dbeef7;
+	--color-d: #bdd2e4;
+	--color-e: #eeceda;
+	--color-f: #ccdceb;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+ * Peechy Design Tokens — Tailwind v4 @theme
+ * All tokens below become Tailwind utility classes automatically.
+ * See doc/styling.md for full usage guide.
+ * ───────────────────────────────────────────────────────────────────────────── */
+@theme {
+	/* ── Primary (Pink Brand) ──────────────────────────────────────────────
+	 * Utilities: bg-primary-*, text-primary-*, border-primary-*,
+	 *            ring-primary-*, fill-primary-*, stroke-primary-*
+	 * ─────────────────────────────────────────────────────────────────── */
+	--color-primary-100: var(--color-a);
+	--color-primary-300: var(--color-e);
+	--color-primary-400: var(--color-f);
+	--color-primary-500: var(--color-d);
+	--color-primary-600: var(--color-c);
+
+	/* ── Secondary (Support / Fun) ─────────────────────────────────────────
+	 * Utilities: bg-secondary-yellow, text-secondary-green, etc.
+	 * ─────────────────────────────────────────────────────────────────── */
+	--color-secondary-yellow: var(--color-e);
+	--color-secondary-green: var(--color-f);
+	--color-secondary-blue: var(--color-c);
+	--color-secondary-peach-100: var(--color-a);
+	--color-secondary-peach-300: var(--color-b);
+	--color-secondary-peach-500: var(--color-e);
+	--color-secondary-peach-600: var(--color-f);
+
+	/* ── Neutral / Gray ────────────────────────────────────────────────────
+	 * Utilities: bg-gray-*, text-gray-*, border-gray-*
+	 * ─────────────────────────────────────────────────────────────────── */
+	--color-gray-50: #f7f7f9;
+	--color-gray-100: var(--color-a);
+	--color-gray-200: var(--color-b);
+	--color-gray-400: #9ca3af;
+	--color-gray-700: #4b5563;
+	--color-gray-900: #1f2937;
+
+	/* ── Semantic ──────────────────────────────────────────────────────────
+	 * Utilities: bg-success, text-error, border-warning, bg-info
+	 * ─────────────────────────────────────────────────────────────────── */
+	--color-success: var(--color-c);
+	--color-error: var(--color-e);
+	--color-warning: var(--color-b);
+	--color-info: var(--color-d);
+
+	/* ── Button State Colors ───────────────────────────────────────────────
+	 * Utilities: bg-btn-primary, bg-btn-primary-hover, etc.
+	 * (Use these with Tailwind's arbitrary value or CSS vars for hover state variants)
+	 * ─────────────────────────────────────────────────────────────────── */
+	--color-btn-primary: var(--color-f);
+	--color-btn-primary-hover: var(--color-d);
+	--color-btn-primary-active: var(--color-c);
+	--color-btn-primary-disabled: var(--color-a);
+
+	--color-btn-secondary-border: var(--color-f);
+	--color-btn-secondary-hover: var(--color-b);
+	--color-btn-secondary-active: var(--color-e);
+
+	--color-btn-ghost-hover: var(--color-b);
+
+	/* ── Focus Ring ────────────────────────────────────────────────────────
+	 * Utilities: ring-focus, outline-focus
+	 * ─────────────────────────────────────────────────────────────────── */
+	--color-focus: var(--color-b);
+
+	/* ── Font Families ─────────────────────────────────────────────────────
+	 * Utilities: font-sans, font-mono
+	 * ─────────────────────────────────────────────────────────────────── */
+	--font-sans: 'Noto Sans Thai', 'Inter', ui-sans-serif, system-ui, sans-serif;
+	--font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+
+	/* ── Border Radius ─────────────────────────────────────────────────────
+	 * Utilities: rounded-sm, rounded-md, rounded-lg, rounded-xl, rounded-2xl
+	 * ─────────────────────────────────────────────────────────────────── */
+	--radius-sm: 0.375rem; /*  6px */
+	--radius-md: 0.75rem; /* 12px */
+	--radius-lg: 1rem; /* 16px */
+	--radius-xl: 1.25rem; /* 20px */
+	--radius-2xl: 1.5rem; /* 24px */
+
+	/* ── Spacing ───────────────────────────────────────────────────────────
+	 * Utilities: p-*, m-*, gap-*, w-*, h-*, space-*, etc.
+	 * e.g. p-sm, mx-lg, gap-md
+	 * ─────────────────────────────────────────────────────────────────── */
+	--spacing-2xs: 0.125rem; /*  2px */
+	--spacing-xs: 0.25rem; /*  4px */
+	--spacing-sm: 0.5rem; /*  8px */
+	--spacing-md: 1rem; /* 16px */
+	--spacing-lg: 1.5rem; /* 24px */
+	--spacing-xl: 2rem; /* 32px */
+	--spacing-2xl: 3rem; /* 48px */
+	--spacing-3xl: 4rem; /* 64px */
+}
+
+/* ── Global focus ring ──────────────────────────────────────────────────────── */
+:focus-visible {
+	outline: 2px solid var(--color-focus);
+	outline-offset: 2px;
+}
+
+html,
+body {
+	background: linear-gradient(180deg, var(--color-a) 0%, var(--color-b) 46%, var(--color-c) 100%);
+	color: var(--color-gray-900);
+}
+
+/* Replace plain-white surfaces with a warm mixed tint across all pages. */
+[class*='bg-white'] {
+	background-color: color-mix(in srgb, var(--color-a) 62%, var(--color-e) 38%) !important;
+}

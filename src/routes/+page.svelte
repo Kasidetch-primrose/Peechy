@@ -1,106 +1,46 @@
 <script lang="ts">
-	import Navbar from '$lib/components/Navbar.svelte';
 	import GameCard from '$lib/components/GameCard.svelte';
 	import GameCardSkeleton from '$lib/components/GameCardSkeleton.svelte';
-	import type { Game } from '$lib/components/GameCard.svelte';
 	import HomeHeader from '$lib/components/HomeHeader.svelte';
+	import GameService from '$lib/data/services/game';
+	import type { IGame } from '$lib/data/interface/game';
+	import { authUserStore } from '$lib/data/stores/authUser';
 
-	// Simulated async load — replace with real SvelteKit load() data in production
 	let loading = $state(true);
-	let games = $state<Game[]>([]);
+	let games = $state<IGame[]>([]);
 
-	const MOCK_GAMES: Game[] = [
-		{
-			id: '1',
-			title: 'ปริศนาคำทาย',
-			description: 'ทายคำจากคำใบ้! เล่นได้ทั้งห้องเรียน สนุกและฝึกคำศัพท์ได้ในเวลาเดียวกัน',
-			category: 'คำศัพท์',
-			playerCount: 3241,
-			coverColor: '#FFE5DC',
-			emoji: '🧩'
-		},
-		{
-			id: '2',
-			title: 'คณิตเร็ว',
-			description: 'แข่งกันตอบโจทย์คณิตศาสตร์ให้เร็วที่สุด ฝึกทักษะการคิดเลขในหัวแบบสนุก',
-			category: 'คณิตศาสตร์',
-			playerCount: 5812,
-			coverColor: '#E8F4FF',
-			emoji: '⚡'
-		},
-		{
-			id: '3',
-			title: 'จับคู่รูปภาพ',
-			description: 'เปิดการ์ดและจับคู่รูปภาพที่เหมือนกัน ฝึกความจำและสมาธิ เหมาะสำหรับทุกวัย',
-			category: 'ความจำ',
-			playerCount: 2108,
-			coverColor: '#F0FFF4',
-			emoji: '🃏'
-		},
-		{
-			id: '4',
-			title: 'ตอบถูกรับรางวัล',
-			description: 'ควิซแบบทีม ตอบคำถามแล้วสะสมคะแนน ปรับเนื้อหาได้ตามวิชา',
-			category: 'ควิซ',
-			playerCount: 9470,
-			coverColor: '#FFFBEA',
-			emoji: '🏆'
-		},
-		{
-			id: '5',
-			title: 'เรียงประโยค',
-			description: 'นำคำมาเรียงให้เป็นประโยคที่ถูกต้อง ฝึกไวยากรณ์และการใช้ภาษาไทย',
-			category: 'ภาษาไทย',
-			playerCount: 1654,
-			coverColor: '#F5F3FF',
-			emoji: '📝'
-		},
-		{
-			id: '6',
-			title: 'ภูมิศาสตร์โลก',
-			description: 'ทายชื่อประเทศ เมืองหลวง และธงชาติ ขยายความรู้เรื่องภูมิศาสตร์แบบสนุก',
-			category: 'สังคมศึกษา',
-			playerCount: 4320,
-			coverColor: '#E6F7FF',
-			emoji: '🌍'
-		}
-	];
+	// Categories derived from the fetched games' difficulty field
+	const categories = $derived(['ทั้งหมด', ...new Set(games.map((g) => g.difficulty ?? 'ทั่วไป'))]);
 
-	const categories = [
-		'ทั้งหมด',
-		'คำศัพท์',
-		'คณิตศาสตร์',
-		'ความจำ',
-		'ควิซ',
-		'ภาษาไทย',
-		'สังคมศึกษา'
-	];
 	let activeCategory = $state('ทั้งหมด');
 	let searchQuery = $state('');
 
 	let filtered = $derived(
-		MOCK_GAMES.filter((g) => {
-			const matchCat = activeCategory === 'ทั้งหมด' || g.category === activeCategory;
+		games.filter((g) => {
+			const matchCat =
+				activeCategory === 'ทั้งหมด' || (g.difficulty ?? 'ทั่วไป') === activeCategory;
 			const matchSearch =
-				g.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-				g.description.toLowerCase().includes(searchQuery.toLowerCase());
+				g.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+				(g.description ?? '').toLowerCase().includes(searchQuery.toLowerCase());
 			return matchCat && matchSearch;
 		})
 	);
 
-	// Simulate network delay
 	$effect(() => {
-		const t = setTimeout(() => {
-			games = MOCK_GAMES;
-			loading = false;
-		}, 1400);
-		return () => clearTimeout(t);
+		loading = true;
+		GameService.paginate({ viewerUserId: $authUserStore.user?.id }, 1, 50)
+			.then((res) => {
+				if (res.status === 'success') {
+					games = res.docs;
+				}
+			})
+			.finally(() => {
+				loading = false;
+			});
 	});
 </script>
 
-<Navbar />
-
-<main class="min-h-screen bg-gray-100">
+<main class="min-h-screen bg-primary-100/30">
 	<!-- ! ! HomeHeader -->
 	<!-- ! ! <HomeHeader /> -->
 
@@ -134,7 +74,7 @@
 					type="search"
 					placeholder="ค้นหาเกม..."
 					bind:value={searchQuery}
-					class="w-full rounded-lg border border-gray-200 bg-white py-sm pr-md pl-lg text-sm text-gray-900
+					class="w-full rounded-lg border border-primary-300 bg-primary-100 py-sm pr-md pl-lg text-sm text-gray-900
                            placeholder:text-gray-400
                            focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:outline-none"
 				/>
@@ -150,7 +90,7 @@
                            focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:outline-none
                            {activeCategory === cat
 						? 'bg-primary-500 text-white'
-						: 'border border-gray-200 bg-white text-gray-700 hover:border-primary-400 hover:text-primary-500'}"
+						: 'border border-primary-300 bg-primary-100 text-gray-700 hover:border-primary-400 hover:text-primary-600'}"
 				>
 					{cat}
 				</button>
@@ -173,7 +113,7 @@
 						searchQuery = '';
 						activeCategory = 'ทั้งหมด';
 					}}
-					class="rounded-lg border border-gray-200 px-lg py-sm text-sm text-gray-700 hover:border-primary-400 hover:text-primary-500"
+					class="rounded-lg border border-primary-300 bg-primary-100 px-lg py-sm text-sm text-gray-700 hover:border-primary-400 hover:text-primary-600"
 				>
 					ล้างการค้นหา
 				</button>

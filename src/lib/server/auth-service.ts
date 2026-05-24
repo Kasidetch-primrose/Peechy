@@ -31,6 +31,29 @@ const REFRESH_TOKEN_SECONDS = 90 * 24 * 60 * 60; // 90 days (matches Go)
 const otpKey = (email: string) => `otp:${email}`;
 const refreshKey = (userId: number) => `refresh:${userId}`;
 
+function isRedisReady() {
+	return redis.status === 'ready';
+}
+
+async function tryRedisWrite(action: string, run: () => Promise<unknown>) {
+	if (!isRedisReady()) {
+		console.warn(`[redis] skip ${action}: client is ${redis.status}`);
+		return;
+	}
+
+	try {
+		await run();
+	} catch (error) {
+		console.warn(`[redis] ${action} failed:`, (error as Error).message);
+	}
+}
+
+function requireRedisReady() {
+	if (!isRedisReady()) {
+		throw new Error('Verification service is temporarily unavailable');
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Claims shape (mirrors Go's Claims struct)
 // ---------------------------------------------------------------------------
@@ -115,6 +138,7 @@ export async function register(username: string, email: string, password: string
 		.returning({ id: users.id, email: users.email, username: users.username });
 
 	// Generate & store OTP
+	requireRedisReady();
 	const otp = generateOtp();
 	await redis.set(otpKey(email), otp, 'EX', OTP_TTL_SECONDS);
 
@@ -139,6 +163,8 @@ export async function register(username: string, email: string, password: string
  * On success, marks the user as verified and deletes the OTP.
  */
 export async function verifyOtp(email: string, otp: string) {
+	requireRedisReady();
+
 	const stored = await redis.get(otpKey(email));
 
 	if (!stored) throw new Error('OTP expired or not found');
@@ -166,6 +192,7 @@ export async function resendOtp(email: string) {
 	if (!user) throw new Error('User not found');
 	if (user.isVerified) throw new Error('Email is already verified');
 
+	requireRedisReady();
 	const otp = generateOtp();
 	await redis.set(otpKey(email), otp, 'EX', OTP_TTL_SECONDS);
 
@@ -205,8 +232,10 @@ export async function login(email: string, password: string) {
 		user.name
 	);
 
-	// Store refresh token in Redis (one active session per user)
-	await redis.set(refreshKey(user.id), refreshToken, 'EX', REFRESH_TOKEN_SECONDS);
+	// Best-effort session cache; token issuance does not depend on Redis.
+	await tryRedisWrite('store refresh token', () =>
+		redis.set(refreshKey(user.id), refreshToken, 'EX', REFRESH_TOKEN_SECONDS)
+	);
 
 	return {
 		accessToken,
@@ -237,10 +266,6 @@ export async function refreshAccessToken(token: string) {
 		throw new Error('Invalid or expired refresh token');
 	}
 
-	// Verify the token matches what we stored (rotation / revocation check)
-	const stored = await redis.get(refreshKey(payload.userId));
-	if (stored !== token) throw new Error('Refresh token revoked');
-
 	const [user] = await db
 		.select({
 			id: users.id,
@@ -262,7 +287,9 @@ export async function refreshAccessToken(token: string) {
 		user.username,
 		user.name
 	);
-	await redis.set(refreshKey(user.id), refreshToken, 'EX', REFRESH_TOKEN_SECONDS);
+	await tryRedisWrite('store rotated refresh token', () =>
+		redis.set(refreshKey(user.id), refreshToken, 'EX', REFRESH_TOKEN_SECONDS)
+	);
 
 	return { accessToken, refreshToken };
 }
@@ -275,5 +302,5 @@ export async function refreshAccessToken(token: string) {
  * Revokes the refresh token for the given user, effectively logging them out.
  */
 export async function logout(userId: number) {
-	await redis.del(refreshKey(userId));
+	await tryRedisWrite('delete refresh token', () => redis.del(refreshKey(userId)));
 }

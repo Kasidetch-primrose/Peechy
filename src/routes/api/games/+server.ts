@@ -5,14 +5,21 @@ import type { RequestHandler } from './$types';
 // POST /api/games — CreateOne
 export const POST: RequestHandler = async ({ request }) => {
 	const body = await request.json();
-	const { name, description, creatorId, difficulty, isPublic } = body;
+	const { name, description, creatorId, difficulty, isPublic, thumbnailUrl } = body;
 
-	if (!name || !creatorId) {
-		return json({ status: 'error', error: 'name and creatorId are required' }, { status: 400 });
+	if (!name) {
+		return json({ status: 'error', error: 'name is required' }, { status: 400 });
 	}
 
 	try {
-		const doc = await gamesLogic.createOne({ name, description, creatorId, difficulty, isPublic });
+		const doc = await gamesLogic.createOne({
+			name,
+			description,
+			creatorId,
+			difficulty,
+			isPublic,
+			thumbnailUrl
+		});
 		return json({ status: 'success', doc }, { status: 201 });
 	} catch (e) {
 		return json({ status: 'error', error: (e as Error).message }, { status: 500 });

@@ -12,7 +12,9 @@ export interface IGame {
 	difficulty: string | null;
 	isPublic: boolean | null;
 	likes: number | null;
+	isLiked?: boolean;
 	playCount: number | null;
+	thumbnailUrl: string | null;
 }
 
 export interface IGameImage {
@@ -86,6 +88,7 @@ export interface ISearchGames {
 	difficulty?: string;
 	creatorId?: number;
 	isPublic?: boolean;
+	viewerUserId?: number;
 }
 
 export interface ISearchImages {
@@ -106,9 +109,10 @@ export interface ISearchGameSessions {
 export interface ICreateGameRequest {
 	name: string;
 	description?: string;
-	creatorId: number;
+	creatorId: number | null;
 	difficulty?: string;
 	isPublic?: boolean;
+	thumbnailUrl?: string;
 }
 
 export interface IUpdateGameRequest {
@@ -116,6 +120,7 @@ export interface IUpdateGameRequest {
 	description?: string;
 	difficulty?: string;
 	isPublic?: boolean;
+	thumbnailUrl?: string;
 }
 
 export interface ICreateImageRequest {
