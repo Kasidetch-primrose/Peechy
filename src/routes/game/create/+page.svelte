@@ -53,8 +53,8 @@
 </script>
 
 {#if $gameCreateStore.loadingEdit}
-	<div class="flex min-h-screen items-center justify-center bg-gray-100">
-		<div class="flex flex-col items-center gap-3 text-gray-400">
+	<div class="flex min-h-screen items-center justify-center bg-transparent">
+		<div class="flex flex-col items-center gap-3 text-primary-500">
 			<svg
 				class="h-8 w-8 animate-spin"
 				xmlns="http://www.w3.org/2000/svg"
@@ -73,14 +73,14 @@
 		</div>
 	</div>
 {:else}
-	<div class="min-h-screen bg-gray-100 py-8 pb-16">
+	<div class="min-h-screen bg-transparent py-8 pb-16">
 		<div class="mx-auto px-4">
 			<!-- ! Page header -->
 			<div class="mb-6 flex items-center gap-3">
 				<button
 					type="button"
 					onclick={() => history.back()}
-					class="flex h-9 w-9 items-center justify-center rounded-lg text-gray-500 transition-colors hover:bg-gray-200"
+					class="flex h-9 w-9 items-center justify-center rounded-lg text-gray-600 transition-colors hover:bg-primary-100/60"
 					aria-label="ย้อนกลับ"
 				>
 					<svg
@@ -104,7 +104,9 @@
 
 			<form onsubmit={(e) => handleSubmit(e, editId)} class="mx-auto flex w-225 flex-col gap-5">
 				<!-- ! ── Game metadata card ─────────────────────────────────── -->
-				<section class="rounded-2xl bg-white p-6 shadow-sm">
+				<section
+					class="rounded-2xl border border-primary-100/60 bg-white/80 p-6 shadow-md backdrop-blur-sm"
+				>
 					<h2 class="mb-4 text-sm font-semibold tracking-wide text-gray-500 uppercase">
 						ข้อมูลเกม
 					</h2>
@@ -394,7 +396,9 @@
 					{/if}
 
 					{#each $gameCreateStore.slots as slot, idx (slot._id)}
-						<div class="overflow-hidden rounded-2xl bg-white shadow-sm">
+						<div
+							class="overflow-hidden rounded-2xl border border-primary-100/60 bg-white/80 shadow-md"
+						>
 							<!-- ! Slot header -->
 							<div
 								class="flex items-center justify-between border-b border-gray-100 bg-gray-50/70 px-4 py-2.5"

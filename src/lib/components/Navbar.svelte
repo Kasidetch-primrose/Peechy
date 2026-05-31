@@ -25,7 +25,7 @@
 </script>
 
 <header
-	class="sticky top-0 z-50 border-b border-primary-400 bg-primary-300/40 shadow-sm backdrop-blur-sm"
+	class="sticky top-0 z-50 border-b border-primary-100/80 bg-white/75 shadow-sm backdrop-blur-md"
 >
 	<nav class="mx-auto flex max-w-6xl items-center justify-between px-lg py-sm">
 		<!-- ! Logo -->
@@ -93,7 +93,7 @@
 
 		<!-- ! Mobile hamburger -->
 		<button
-			class="flex items-center justify-center rounded-md p-xs text-primary-600 hover:bg-primary-300/60
+			class="hover:bg-primary-300/60 flex items-center justify-center rounded-md p-xs text-primary-600
                    focus-visible:ring-2 focus-visible:ring-focus focus-visible:outline-none md:hidden"
 			onclick={() => (mobileMenuOpen = !mobileMenuOpen)}
 			aria-label="Toggle menu"
@@ -142,7 +142,7 @@
 
 	<!-- ! Mobile menu -->
 	{#if mobileMenuOpen}
-		<div class="border-t border-primary-400 bg-primary-300/50 px-lg py-md md:hidden">
+		<div class="border-t border-primary-100/60 bg-white/85 px-lg py-md backdrop-blur-md md:hidden">
 			<ul class="flex flex-col gap-md" role="list">
 				{#each navLinks as link}
 					<li>

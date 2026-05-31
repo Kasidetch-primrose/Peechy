@@ -65,7 +65,7 @@
 			onclick={handleToggleLike}
 			aria-label={liked ? `ยกเลิกถูกใจเกม ${game.name}` : `ถูกใจเกม ${game.name}`}
 			disabled={likeLoading}
-			class="bg-secondary-peach-100/95 absolute top-3 right-3 z-10 flex h-9 w-9 items-center justify-center rounded-full text-gray-500 shadow-sm backdrop-blur transition-colors hover:text-red-500 disabled:opacity-50"
+			class="absolute top-3 right-3 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-white/90 text-gray-500 shadow-sm backdrop-blur transition-colors hover:text-red-500 disabled:opacity-50"
 		>
 			<svg
 				xmlns="http://www.w3.org/2000/svg"
@@ -88,8 +88,8 @@
 
 	<a href={`/game/detail/${game.id}`} class="block" aria-label={`เปิดรายละเอียดเกม ${game.name}`}>
 		<article
-			class="group bg-secondary-peach-100 flex cursor-pointer flex-col overflow-hidden rounded-xl shadow-sm
-         transition-all duration-200 hover:-translate-y-1 hover:shadow-md"
+			class="group flex cursor-pointer flex-col overflow-hidden rounded-2xl border border-primary-100/60 bg-white/85 shadow-sm
+         transition-all duration-200 hover:-translate-y-1.5 hover:border-primary-400/30 hover:shadow-lg"
 		>
 			<!-- ! Cover -->
 			{#if game.thumbnailUrl}
@@ -123,9 +123,7 @@
 				</p>
 
 				<!-- ! Footer -->
-				<div
-					class="border-secondary-peach-300 mt-xs flex items-center justify-between border-t pt-sm"
-				>
+				<div class="mt-xs flex items-center justify-between border-t border-primary-100/60 pt-sm">
 					<span class="flex items-center gap-xs text-xs text-gray-400">
 						<!-- ! person icon -->
 						<svg

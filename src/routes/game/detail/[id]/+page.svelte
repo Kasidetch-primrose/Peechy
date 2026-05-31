@@ -19,8 +19,8 @@
 </script>
 
 {#if $gameDetailStore.loading}
-	<div class="flex min-h-screen items-center justify-center bg-gray-50">
-		<div class="flex flex-col items-center gap-3 text-gray-400">
+	<div class="flex min-h-screen items-center justify-center bg-transparent">
+		<div class="flex flex-col items-center gap-3 text-primary-500">
 			<svg
 				class="h-8 w-8 animate-spin"
 				xmlns="http://www.w3.org/2000/svg"
@@ -39,12 +39,12 @@
 		</div>
 	</div>
 {:else if $gameDetailStore.error}
-	<div class="flex min-h-screen flex-col items-center justify-center gap-4 bg-gray-50">
+	<div class="flex min-h-screen flex-col items-center justify-center gap-4 bg-transparent">
 		<span class="text-5xl">😕</span>
 		<p class="text-base font-medium text-gray-700">{$gameDetailStore.error}</p>
 		<button
 			onclick={() => goto('/')}
-			class="rounded-lg bg-primary-500 px-5 py-2 text-sm font-medium text-white hover:bg-primary-400"
+			class="rounded-xl bg-primary-500 px-5 py-2 text-sm font-medium text-white hover:bg-primary-400"
 		>
 			ย้อนกลับ
 		</button>
@@ -52,15 +52,15 @@
 {:else if $gameDetailStore.game}
 	{@const game = $gameDetailStore.game}
 	{@const images = $gameDetailStore.images}
-	<div class="min-h-screen bg-gray-50">
+	<div class="min-h-screen bg-transparent">
 		<!-- ! ── Hero ──────────────────────────────────────────────────────────── -->
-		<div class="bg-white shadow-sm">
+		<div class="border-b border-primary-100/40 bg-white/70 backdrop-blur-sm shadow-sm">
 			<div class="mx-auto max-w-4xl px-4 py-6">
 				<!-- ! Back + actions row -->
 				<div class="mb-4 flex items-center justify-between">
 					<button
 						onclick={() => goto('/')}
-						class="flex items-center gap-1.5 text-sm text-gray-500 transition-colors hover:text-gray-800"
+						class="flex items-center gap-1.5 text-sm text-gray-600 transition-colors hover:text-primary-500"
 					>
 						<svg
 							xmlns="http://www.w3.org/2000/svg"
@@ -399,7 +399,7 @@
 				{#if $isCreatorStore}
 					<a
 						href="/game/create?id={game.id}"
-						class="mt-4 inline-block rounded-lg bg-primary-500 px-5 py-2 text-sm font-medium text-white hover:bg-primary-400"
+						class="mt-4 inline-block rounded-xl bg-primary-500 px-5 py-2 text-sm font-medium text-white hover:bg-primary-400"
 					>
 						เพิ่มรูปภาพ
 					</a>

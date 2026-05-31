@@ -89,8 +89,10 @@
 
 {#if $gamePlayStore.loading}
 	<!-- ── Loading ─────────────────────────────────────────────────────────── -->
-	<div class="flex min-h-screen items-center justify-center">
-		<div class="flex flex-col items-center gap-3 text-gray-400">
+	<div
+		class="flex min-h-screen items-center justify-center bg-gradient-to-br from-primary-100/40 via-white to-primary-100/20"
+	>
+		<div class="game-enter flex flex-col items-center gap-3 text-primary-500">
 			<svg
 				class="h-8 w-8 animate-spin"
 				xmlns="http://www.w3.org/2000/svg"
@@ -110,36 +112,42 @@
 	</div>
 {:else if $gamePlayStore.error}
 	<!-- ── Error ──────────────────────────────────────────────────────────── -->
-	<div class="flex min-h-screen flex-col items-center justify-center gap-4">
+	<div
+		class="flex min-h-screen flex-col items-center justify-center gap-4 bg-gradient-to-br from-primary-100/40 via-white to-primary-100/20"
+	>
 		<span class="text-5xl">😕</span>
 		<p class="text-base font-medium">{$gamePlayStore.error}</p>
 		<button
 			onclick={() => history.back()}
-			class="rounded-lg bg-primary-500 px-5 py-2 text-sm font-medium hover:bg-primary-400"
+			class="rounded-xl bg-primary-500 px-5 py-2 text-sm font-medium text-white transition-all hover:bg-primary-400 active:bg-primary-600"
 		>
 			ย้อนกลับ
 		</button>
 	</div>
 {:else if $gamePlayStore.finished}
 	<!-- ── Finished screen ───────────────────────────────────────────────── -->
-	<div class="flex min-h-screen flex-col items-center justify-center gap-6 px-4">
-		<div class="flex flex-col items-center gap-2">
+	<div
+		class="flex min-h-screen flex-col items-center justify-center gap-6 bg-gradient-to-br from-primary-100/40 via-white to-primary-100/20 px-4"
+	>
+		<div class="game-enter flex flex-col items-center gap-2">
 			<span class="text-6xl">🎉</span>
 			<h1 class="text-3xl font-bold">จบเกมแล้ว!</h1>
 			<p class="text-gray-400">{$gamePlayStore.game?.name}</p>
 		</div>
 
-		<div class="flex flex-col items-center gap-1 rounded-2xl bg-white/10 px-12 py-6">
-			<span class="text-sm text-gray-400">คะแนนรวม</span>
-			<span class="text-5xl font-bold text-primary-400">{$gamePlayStore.score}</span>
-			<span class="text-xs text-gray-500">จาก {$gamePlayStore.images.length} รูป</span>
+		<div
+			class="flex flex-col items-center gap-1 rounded-2xl border border-primary-100 bg-white/80 px-12 py-8 shadow-md backdrop-blur-sm"
+		>
+			<span class="text-sm text-gray-500">คะแนนรวม</span>
+			<span class="text-5xl font-bold text-primary-500">{$gamePlayStore.score}</span>
+			<span class="text-xs text-gray-400">จาก {$gamePlayStore.images.length} รูป</span>
 		</div>
 
 		<div class="flex gap-3">
 			<button
 				onclick={handleFinish}
 				disabled={finishing}
-				class="rounded-xl border border-white/20 px-6 py-3 text-sm font-medium transition-colors hover:bg-white/10"
+				class="rounded-xl border border-primary-400/50 px-6 py-3 text-sm font-medium text-primary-600 transition-all hover:bg-primary-100 active:scale-95"
 			>
 				{finishing ? 'กำลังบันทึก...' : 'เสร็จสิ้น'}
 			</button>
@@ -157,13 +165,18 @@
 	{@const revealed = $gamePlayStore.revealedTiles}
 	{@const status = $gamePlayStore.status}
 	{@const maxReveal = image.maxReveal}
+	{@const shouldShowImage = revealed.length > 0 || status !== 'playing'}
 
-	<div class="flex h-screen flex-col">
+	<div
+		class="game-enter flex h-screen flex-col bg-gradient-to-br from-primary-100/40 via-white to-primary-100/20"
+	>
 		<!-- ── Top bar ──────────────────────────────────────────────────────── -->
-		<div class="flex items-center justify-between px-4 py-3">
+		<div
+			class="flex items-center justify-between border-b border-primary-100/60 bg-white/50 px-4 py-3 backdrop-blur-sm"
+		>
 			<button
 				onclick={() => goto(`/game/detail/${gameId}`)}
-				class="flex items-center gap-1.5 text-sm text-gray-400 transition-colors"
+				class="flex items-center gap-1.5 text-sm text-gray-600 transition-colors hover:text-primary-500"
 				aria-label="ออกจากเกม"
 			>
 				<svg
@@ -184,7 +197,7 @@
 
 			<div class="flex items-center gap-4">
 				<!-- Progress -->
-				<span class="text-sm text-gray-400">
+				<span class="text-sm text-gray-600">
 					{$gamePlayStore.imageIdx + 1} / {$gamePlayStore.images.length}
 				</span>
 				<!-- Score -->
@@ -193,9 +206,8 @@
 				</span>
 			</div>
 		</div>
-
 		<!-- ── Progress bar ─────────────────────────────────────────────────── -->
-		<div class="h-1 w-full bg-white/10">
+		<div class="h-1 w-full bg-primary-100">
 			<div
 				class="h-full bg-primary-500 transition-all duration-300"
 				style="width: {($gamePlayStore.imageIdx / $gamePlayStore.images.length) * 100}%"
@@ -213,7 +225,7 @@
 						class="flex items-center gap-1.5 font-mono font-semibold tabular-nums {$gamePlayStore.timeLeft <=
 						5
 							? 'text-error'
-							: 'text-gray-300'}"
+							: 'text-gray-700'}"
 					>
 						<svg
 							xmlns="http://www.w3.org/2000/svg"
@@ -246,7 +258,7 @@
 			<!-- ── Tile grid ─────────────────────────────────────────────────── -->
 			<!-- พื้นหลัง -->
 			<div
-				class="relative min-h-0 w-full flex-1 overflow-hidden bg-transparent shadow-lg"
+				class="relative min-h-0 w-full flex-1 overflow-hidden rounded-2xl bg-primary-100/10 shadow-sm"
 				bind:clientWidth={containerW}
 				bind:clientHeight={containerH}
 			>
@@ -254,7 +266,9 @@
 				<img
 					src={image.imageUrl}
 					alt="รูปที่ {$gamePlayStore.imageIdx + 1}"
-					class="absolute inset-0 h-full w-full object-contain"
+					class="absolute inset-0 h-full w-full object-contain {shouldShowImage
+						? 'opacity-100'
+						: 'opacity-0'}"
 					onload={onImgLoad}
 				/>
 
@@ -273,88 +287,55 @@
 							type="button"
 							onclick={() => revealTile(i)}
 							disabled={!isInteractive}
-							class="flex items-center justify-center border border-gray-800/60 transition-all duration-200 {isRevealed
+							class="flex items-center justify-center border border-primary-400/20 transition-all duration-200 {isRevealed
 								? 'bg-transparent'
-								: 'bg-gray-950 hover:bg-gray-800'} {isInteractive
+								: 'bg-primary-100 hover:bg-primary-400 hover:shadow-sm'} {isInteractive
 								? 'cursor-pointer'
 								: 'cursor-default'}"
 							aria-label="เปิดช่อง {i + 1}"
 						>
 							{#if !isRevealed}
-								<span class="text-xs font-medium text-gray-400/60 select-none">{i + 1}</span>
+								<span class="text-xs font-medium text-primary-500/70 select-none">{i + 1}</span>
 							{/if}
 						</button>
 					{/each}
 				</div>
 
-				<!-- Status overlay: correct / timeout / revealed -->
-				{#if status === 'correct'}
-					<div
-						class="absolute flex flex-col items-center justify-center gap-2 rounded-2xl bg-success/20 backdrop-blur-[2px]"
-						style={imageAreaStyle}
-					>
-						<svg
-							xmlns="http://www.w3.org/2000/svg"
-							width="48"
-							height="48"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="#6BCB77"
-							stroke-width="2.5"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-						>
-							<circle cx="12" cy="12" r="10" /><polyline points="9 11 12 14 22 4" />
-						</svg>
-						<span class="text-lg font-bold text-success">ถูกต้อง!</span>
-					</div>
-				{:else if status === 'timeout'}
-					<div
-						class="absolute flex flex-col items-center justify-center gap-2 rounded-2xl bg-black/60 backdrop-blur-[2px]"
-						style={imageAreaStyle}
-					>
-						<svg
-							xmlns="http://www.w3.org/2000/svg"
-							width="40"
-							height="40"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="#FF6B6B"
-							stroke-width="2"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-						>
-							<circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
-						</svg>
-						<span class="text-lg font-bold text-error">หมดเวลา</span>
-						<span class="text-sm text-gray-300"
-							>คำตอบ: <span class="font-semibold">{image.answer}</span></span
-						>
-					</div>
-				{:else if status === 'revealed'}
-					<div
-						class="absolute flex flex-col items-center justify-center gap-2 rounded-2xl bg-black/50 backdrop-blur-[2px]"
-						style={imageAreaStyle}
-					>
-						<span class="text-base text-gray-300"
-							>คำตอบ: <span class="font-bold">{image.answer}</span></span
-						>
+				<!-- Status overlay: keep image clear, only show labels above image -->
+				{#if status === 'correct' || status === 'timeout' || status === 'revealed'}
+					<div class="pointer-events-none absolute" style={imageAreaStyle}>
+						<div class="absolute top-3 left-1/2 flex -translate-x-1/2 flex-col items-center gap-2">
+							<span
+								class="rounded-full px-3 py-1 text-xs font-semibold shadow-sm {status === 'correct'
+									? 'bg-success/90 text-black'
+									: status === 'timeout'
+										? 'bg-error/90 text-white'
+										: 'text-primary-700 bg-primary-100/95'}"
+							>
+								{status === 'correct' ? 'ถูกต้อง!' : status === 'timeout' ? 'หมดเวลา' : 'เฉลย'}
+							</span>
+							<span
+								class="rounded-full border border-white/60 bg-white/90 px-4 py-1.5 text-sm font-semibold text-gray-700 shadow-sm"
+							>
+								คำตอบ: {image.answer}
+							</span>
+						</div>
 					</div>
 				{/if}
 			</div>
 
 			<!-- ── Hint ────────────────────────────────────────────────────── -->
 			{#if image.hint && status === 'playing'}
-				<p class="shrink-0 text-sm text-gray-400">💡 {image.hint}</p>
+				<p class="shrink-0 text-sm text-gray-600">💡 {image.hint}</p>
 			{/if}
 
 			<!-- ── Answer input ─────────────────────────────────────────────── -->
 			{#if status === 'playing' || status === 'revealed'}
 				<div class="flex w-full shrink-0 flex-col gap-2">
 					<div
-						class="flex overflow-hidden rounded-xl border transition-colors {$gamePlayStore.wrongShake
+						class="flex overflow-hidden rounded-xl border bg-white/80 backdrop-blur-sm transition-all {$gamePlayStore.wrongShake
 							? 'animate-shake border-error'
-							: ' border-gray-700 focus-within:border-primary-400'}"
+							: 'border-primary-400/40 focus-within:border-primary-400 focus-within:shadow-sm'}"
 					>
 						<input
 							type="text"
@@ -364,7 +345,7 @@
 							autocomplete="off"
 							autocorrect="off"
 							spellcheck={false}
-							class="flex-1 bg-transparent px-4 py-3 text-sm outline-none placeholder:text-gray-600"
+							class="flex-1 bg-transparent px-4 py-3 text-sm text-gray-700 outline-none placeholder:text-gray-400"
 						/>
 						<button
 							type="button"
@@ -374,7 +355,7 @@
 							ส่ง
 						</button>
 					</div>
-					<p class="text-center text-xs text-gray-600">Enter เพื่อส่งคำตอบ</p>
+					<p class="text-center text-xs text-gray-400">Enter เพื่อส่งคำตอบ</p>
 				</div>
 			{/if}
 
@@ -385,7 +366,7 @@
 						type="button"
 						onclick={undoReveal}
 						disabled={$gamePlayStore.undoStack.length === 0}
-						class="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-white/15 py-3 text-sm font-medium text-gray-300 transition-colors hover:border-white/30 disabled:cursor-not-allowed disabled:opacity-30"
+						class="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-primary-400/40 py-3 text-sm font-medium text-primary-600 transition-all hover:border-primary-400 hover:bg-primary-100/60 disabled:cursor-not-allowed disabled:opacity-40"
 					>
 						<svg
 							xmlns="http://www.w3.org/2000/svg"

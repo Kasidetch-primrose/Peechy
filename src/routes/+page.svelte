@@ -40,7 +40,7 @@
 	});
 </script>
 
-<main class="min-h-screen bg-primary-100/30">
+<main class="game-enter min-h-screen bg-transparent">
 	<!-- ! ! HomeHeader -->
 	<!-- ! ! <HomeHeader /> -->
 
@@ -74,7 +74,7 @@
 					type="search"
 					placeholder="ค้นหาเกม..."
 					bind:value={searchQuery}
-					class="w-full rounded-lg border border-primary-300 bg-primary-100 py-sm pr-md pl-lg text-sm text-gray-900
+					class="border-primary-300 w-full rounded-lg border bg-primary-100 py-sm pr-md pl-lg text-sm text-gray-900
                            placeholder:text-gray-400
                            focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:outline-none"
 				/>
@@ -90,7 +90,7 @@
                            focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:outline-none
                            {activeCategory === cat
 						? 'bg-primary-500 text-white'
-						: 'border border-primary-300 bg-primary-100 text-gray-700 hover:border-primary-400 hover:text-primary-600'}"
+						: 'border-primary-300 border bg-primary-100 text-gray-700 hover:border-primary-400 hover:text-primary-600'}"
 				>
 					{cat}
 				</button>
@@ -113,7 +113,7 @@
 						searchQuery = '';
 						activeCategory = 'ทั้งหมด';
 					}}
-					class="rounded-lg border border-primary-300 bg-primary-100 px-lg py-sm text-sm text-gray-700 hover:border-primary-400 hover:text-primary-600"
+					class="border-primary-300 rounded-lg border bg-primary-100 px-lg py-sm text-sm text-gray-700 hover:border-primary-400 hover:text-primary-600"
 				>
 					ล้างการค้นหา
 				</button>

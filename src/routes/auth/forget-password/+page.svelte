@@ -28,8 +28,8 @@
 	}
 </script>
 
-<div class="flex min-h-screen items-center justify-center bg-gray-100 px-4 py-12">
-	<div class="w-full max-w-md">
+<div class="flex min-h-screen items-center justify-center bg-transparent px-4 py-12">
+	<div class="game-enter w-full max-w-md">
 		<!-- Brand -->
 		<div class="mb-8 text-center">
 			<div
@@ -42,7 +42,9 @@
 		</div>
 
 		<!-- Card -->
-		<div class="rounded-2xl bg-white p-8 shadow-sm">
+		<div
+			class="rounded-2xl border border-primary-100/60 bg-white/80 p-8 shadow-md backdrop-blur-sm"
+		>
 			{#if sent}
 				<!-- Success state -->
 				<div class="flex flex-col items-center gap-4 py-4 text-center">
