@@ -84,12 +84,6 @@
 		}
 		return `top:${y}px;left:${x}px;width:${w}px;height:${h}px;`;
 	});
-
-	let hints = [
-		'1. ลองเปิดช่องที่ 1 ดูสิ',
-		'2. รูปนี้เกี่ยวกับอาหารนะ',
-		'3. อาหารจานนี้มีชื่อว่าอะไรนะ?'
-	];
 </script>
 
 <svelte:window onkeydown={onKeydown} />
