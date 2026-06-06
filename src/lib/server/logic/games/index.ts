@@ -1,7 +1,7 @@
 import { db } from '$lib/server/db';
 import { games } from '$lib/server/db/GamesModel';
 import { userGameLikes } from '$lib/server/db/UserModel';
-import { eq, isNull, ilike, and, inArray, sql, desc } from 'drizzle-orm';
+import { eq, isNull, ilike, and, inArray, sql, desc, lt } from 'drizzle-orm';
 
 // ---------------------------------------------------------------------------
 // Payload types (mirrors Go's dto/request_search pattern)
@@ -11,6 +11,7 @@ export type CreateGameData = {
 	name: string;
 	description?: string;
 	creatorId: number | null;
+	creatorToken?: string;
 	difficulty?: string;
 	isPublic?: boolean;
 	thumbnailUrl?: string;
@@ -37,9 +38,23 @@ export async function createOne(data: CreateGameData) {
 	return created;
 }
 
+const publicGameFields = {
+	id: games.id,
+	createdAt: games.createdAt,
+	deletedAt: games.deletedAt,
+	name: games.name,
+	description: games.description,
+	creatorId: games.creatorId,
+	difficulty: games.difficulty,
+	isPublic: games.isPublic,
+	likes: games.likes,
+	playCount: games.playCount,
+	thumbnailUrl: games.thumbnailUrl
+};
+
 export async function getOne(id: number) {
 	const [item] = await db
-		.select()
+		.select(publicGameFields)
 		.from(games)
 		.where(and(eq(games.id, id), isNull(games.deletedAt)));
 	return item ?? null;
@@ -54,8 +69,60 @@ export async function updateOne(id: number, data: UpdateGameData) {
 	return updated ?? null;
 }
 
+export async function deleteOne(id: number, auth: { userId?: number; creatorToken?: string }) {
+	const [row] = await db
+		.select({ creatorId: games.creatorId, creatorToken: games.creatorToken })
+		.from(games)
+		.where(and(eq(games.id, id), isNull(games.deletedAt)));
+
+	if (!row) return null;
+
+	if (auth.userId !== undefined && auth.userId !== null) {
+		if (row.creatorId !== auth.userId) throw new Error('Unauthorized');
+	} else if (auth.creatorToken) {
+		if (!row.creatorToken || row.creatorToken !== auth.creatorToken) throw new Error('Unauthorized');
+	} else {
+		throw new Error('Unauthorized');
+	}
+
+	const [deleted] = await db
+		.update(games)
+		.set({ deletedAt: new Date() })
+		.where(and(eq(games.id, id), isNull(games.deletedAt)))
+		.returning();
+
+	return deleted ?? null;
+}
+
+export async function purgeExpiredAnonymousGames() {
+	const cutoff = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000);
+	await db
+		.update(games)
+		.set({ deletedAt: new Date() })
+		.where(and(isNull(games.creatorId), isNull(games.deletedAt), lt(games.createdAt, cutoff)));
+}
+
 export async function deleteMany(ids: number[]) {
 	if (ids.length === 0) return;
+	await db
+		.update(games)
+		.set({ deletedAt: new Date() })
+		.where(and(inArray(games.id, ids), isNull(games.deletedAt)));
+}
+
+export async function deleteWithToken(ids: number[], creatorToken: string) {
+	if (ids.length === 0) return;
+	const rows = await db
+		.select({ id: games.id, creatorToken: games.creatorToken })
+		.from(games)
+		.where(and(inArray(games.id, ids), isNull(games.deletedAt)));
+
+	for (const row of rows) {
+		if (row.creatorToken !== null && row.creatorToken !== creatorToken) {
+			throw new Error('Unauthorized');
+		}
+	}
+
 	await db
 		.update(games)
 		.set({ deletedAt: new Date() })
@@ -81,7 +148,7 @@ export async function paginate(payload: PaginateGamesPayload) {
 		.where(where);
 
 	const items = await db
-		.select()
+		.select(publicGameFields)
 		.from(games)
 		.where(where)
 		.orderBy(desc(games.createdAt))

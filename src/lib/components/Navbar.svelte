@@ -57,12 +57,13 @@
 		<div class="hidden items-center gap-sm md:flex">
 			{#if $authUserStore.user}
 				<div class="flex items-center gap-3">
-					<div
-						class="border-primary-200 bg-primary-50 text-primary-700 flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm"
+					<a
+						href={`/profile/${$authUserStore.user.id}`}
+						class="border-primary-200 bg-primary-50 text-primary-700 flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm hover:bg-primary-100 focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:outline-none"
 					>
 						<span class="h-2 w-2 rounded-full bg-primary-500"></span>
 						<span class="font-medium">{$authUserStore.user.username}</span>
-					</div>
+					</a>
 					<button
 						type="button"
 						onclick={handleLogout}

@@ -2,6 +2,16 @@ import { json } from '@sveltejs/kit';
 import * as sessionsLogic from '$lib/server/logic/game-sessions';
 import type { RequestHandler } from './$types';
 
+function serverErr(e: unknown) {
+	const msg =
+		process.env.NODE_ENV === 'development'
+			? e instanceof Error
+				? e.message
+				: String(e)
+			: 'Internal server error';
+	return json({ status: 'error', error: msg }, { status: 500 });
+}
+
 // POST /api/game-sessions — CreateOne
 export const POST: RequestHandler = async ({ request }) => {
 	const body = await request.json();
@@ -15,7 +25,7 @@ export const POST: RequestHandler = async ({ request }) => {
 		const doc = await sessionsLogic.createOne(body);
 		return json({ status: 'success', doc }, { status: 201 });
 	} catch (e) {
-		return json({ status: 'error', error: (e as Error).message }, { status: 500 });
+		return serverErr(e);
 	}
 };
 
@@ -31,6 +41,6 @@ export const DELETE: RequestHandler = async ({ request }) => {
 		await sessionsLogic.deleteMany(ids);
 		return json({ status: 'success' });
 	} catch (e) {
-		return json({ status: 'error', error: (e as Error).message }, { status: 500 });
+		return serverErr(e);
 	}
 };

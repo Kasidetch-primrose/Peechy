@@ -36,11 +36,26 @@ export default class GameService {
 		return res.json();
 	}
 
-	static async deleteMany(ids: number[]): Promise<IStatusResponse> {
+	static async deleteOne(
+		id: number,
+		accessToken?: string,
+		creatorToken?: string
+	): Promise<IStatusResponse> {
+		const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+		if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
+		const res = await fetch(`/api/games/${id}`, {
+			method: 'DELETE',
+			headers,
+			body: JSON.stringify({ creatorToken })
+		});
+		return res.json();
+	}
+
+	static async deleteMany(ids: number[], creatorToken: string): Promise<IStatusResponse> {
 		const res = await fetch('/api/games', {
 			method: 'DELETE',
 			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ ids })
+			body: JSON.stringify({ ids, creatorToken })
 		});
 		return res.json();
 	}

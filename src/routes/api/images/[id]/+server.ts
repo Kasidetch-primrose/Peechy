@@ -2,6 +2,16 @@ import { json } from '@sveltejs/kit';
 import * as imagesLogic from '$lib/server/logic/images';
 import type { RequestHandler } from './$types';
 
+function serverErr(e: unknown) {
+	const msg =
+		process.env.NODE_ENV === 'development'
+			? e instanceof Error
+				? e.message
+				: String(e)
+			: 'Internal server error';
+	return json({ status: 'error', error: msg }, { status: 500 });
+}
+
 // GET /api/images/[id] — GetOne
 export const GET: RequestHandler = async ({ params }) => {
 	const id = parseInt(params.id);
@@ -16,7 +26,7 @@ export const GET: RequestHandler = async ({ params }) => {
 		}
 		return json({ status: 'success', doc });
 	} catch (e) {
-		return json({ status: 'error', error: (e as Error).message }, { status: 500 });
+		return serverErr(e);
 	}
 };
 
@@ -35,6 +45,6 @@ export const PUT: RequestHandler = async ({ params, request }) => {
 		}
 		return json({ status: 'success', doc });
 	} catch (e) {
-		return json({ status: 'error', error: (e as Error).message }, { status: 500 });
+		return serverErr(e);
 	}
 };

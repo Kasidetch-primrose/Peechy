@@ -126,8 +126,11 @@ export async function paginate(payload: PaginateImagesPayload) {
 
 // Replace all hints for an image in one shot
 export async function syncHints(imageId: number, hints: { hint: string; orderIndex: number }[]) {
-	// Hard-delete existing hints for this image
-	await db.delete(imageHints).where(eq(imageHints.imageId, imageId));
+	// Soft-delete existing active hints for this image
+	await db
+		.update(imageHints)
+		.set({ deletedAt: new Date() })
+		.where(and(eq(imageHints.imageId, imageId), isNull(imageHints.deletedAt)));
 
 	if (hints.length === 0) return [];
 

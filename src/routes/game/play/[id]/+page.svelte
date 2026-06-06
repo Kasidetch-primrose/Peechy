@@ -160,7 +160,7 @@
 			</button> -->
 		</div>
 	</div>
-{:else}
+{:else if $gamePlayStore.images[$gamePlayStore.imageIdx]}
 	{@const image = $gamePlayStore.images[$gamePlayStore.imageIdx]}
 	{@const total = image.gridSize * image.gridSize}
 	{@const revealed = $gamePlayStore.revealedTiles}
@@ -173,7 +173,7 @@
 	>
 		<!-- ── Top bar ──────────────────────────────────────────────────────── -->
 		<div
-			class="flex items-center justify-between border-b border-primary-100/60 bg-white/50 px-4 py-3 backdrop-blur-sm"
+			class="relative z-10 flex items-center justify-between border-b border-primary-100/60 bg-white/50 px-4 py-3 backdrop-blur-sm"
 		>
 			<button
 				onclick={() => goto(`/game/detail/${gameId}`)}

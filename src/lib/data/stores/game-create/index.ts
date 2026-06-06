@@ -472,6 +472,9 @@ export async function handleSubmit(e: SubmitEvent, editId: number | null) {
 			});
 			if (res.status !== 'success') throw new Error(res.error ?? 'ไม่สามารถสร้างเกมได้');
 			gameId = res.doc.id;
+			if (res.doc.creatorToken) {
+				localStorage.setItem(`creator_token_${gameId}`, res.doc.creatorToken);
+			}
 		}
 
 		if (pendingDeletes.length > 0) await ImageService.deleteMany(pendingDeletes);

@@ -39,7 +39,17 @@ export const gameDetailStore = writable<GameDetailState>({ ...initial });
 
 export const isCreatorStore = derived(
 	[gameDetailStore, authUserStore],
-	([$detail, $auth]) => $auth.user?.id === $detail.game?.creatorId
+	([$detail, $auth]) => {
+		const game = $detail.game;
+		if (!game) return false;
+		// Logged-in user who owns the game
+		if ($auth.user?.id && $auth.user.id === game.creatorId) return true;
+		// Guest creator: check for the token saved in localStorage at creation time
+		if (typeof localStorage !== 'undefined') {
+			return !!localStorage.getItem(`creator_token_${game.id}`);
+		}
+		return false;
+	}
 );
 
 export function resetGameDetailStore() {
@@ -71,4 +81,22 @@ export async function loadGame(id: number) {
 
 export function setActiveImage(idx: number) {
 	gameDetailStore.update((s) => ({ ...s, activeImageIdx: idx }));
+}
+
+export async function deleteGame(id: number): Promise<{ ok: boolean; error?: string }> {
+	let accessToken: string | undefined;
+	let creatorToken: string | undefined;
+
+	// Read auth state synchronously from the store's current value
+	authUserStore.subscribe((s) => {
+		accessToken = s.accessToken || undefined;
+	})();
+
+	if (typeof localStorage !== 'undefined') {
+		creatorToken = localStorage.getItem(`creator_token_${id}`) ?? undefined;
+	}
+
+	const res = await GameService.deleteOne(id, accessToken, creatorToken);
+	if (res.status === 'success') return { ok: true };
+	return { ok: false, error: res.error ?? 'เกิดข้อผิดพลาด' };
 }

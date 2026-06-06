@@ -104,6 +104,14 @@ function parseToken(token: string): JwtClaims {
 	}) as unknown as JwtClaims;
 }
 
+export function verifyAccessToken(token: string): JwtClaims | null {
+	try {
+		return parseToken(token);
+	} catch {
+		return null;
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Register
 // ---------------------------------------------------------------------------

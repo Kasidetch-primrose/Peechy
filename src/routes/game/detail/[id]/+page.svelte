@@ -7,9 +7,28 @@
 		loadGame,
 		resetGameDetailStore,
 		setActiveImage,
+		deleteGame,
 		difficultyLabel,
 		difficultyBg
 	} from '$lib/data/stores/game-detail';
+
+	let confirmDelete = $state(false);
+	let deleting = $state(false);
+	let deleteError = $state('');
+
+	async function handleDelete() {
+		const id = $gameDetailStore.game?.id;
+		if (!id) return;
+		deleting = true;
+		deleteError = '';
+		const result = await deleteGame(id);
+		deleting = false;
+		if (result.ok) {
+			goto('/');
+		} else {
+			deleteError = result.error ?? 'เกิดข้อผิดพลาด';
+		}
+	}
 
 	$effect(() => {
 		const id = Number(page.params.id);
@@ -54,7 +73,7 @@
 	{@const images = $gameDetailStore.images}
 	<div class="min-h-screen bg-transparent">
 		<!-- ! ── Hero ──────────────────────────────────────────────────────────── -->
-		<div class="border-b border-primary-100/40 bg-white/70 backdrop-blur-sm shadow-sm">
+		<div class="border-b border-primary-100/40 bg-white/70 shadow-sm backdrop-blur-sm">
 			<div class="mx-auto max-w-4xl px-4 py-6">
 				<!-- ! Back + actions row -->
 				<div class="mb-4 flex items-center justify-between">
@@ -79,27 +98,55 @@
 					</button>
 
 					{#if $isCreatorStore}
-						<a
-							href="/game/create?id={game.id}"
-							class="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:border-primary-400 hover:text-primary-600"
-						>
-							<svg
-								xmlns="http://www.w3.org/2000/svg"
-								width="14"
-								height="14"
-								viewBox="0 0 24 24"
-								fill="none"
-								stroke="currentColor"
-								stroke-width="2"
-								stroke-linecap="round"
-								stroke-linejoin="round"
+						<div class="flex items-center gap-2">
+							<a
+								href="/game/create?id={game.id}"
+								class="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-700 transition-colors hover:border-primary-400 hover:text-primary-600"
 							>
-								<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path
-									d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"
-								/>
-							</svg>
-							แก้ไขเกม
-						</a>
+								<svg
+									xmlns="http://www.w3.org/2000/svg"
+									width="14"
+									height="14"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+								>
+									<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path
+										d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"
+									/>
+								</svg>
+								แก้ไขเกม
+							</a>
+							<button
+								onclick={() => {
+									confirmDelete = true;
+									deleteError = '';
+								}}
+								class="flex items-center gap-1.5 rounded-lg border border-red-200 px-3 py-1.5 text-sm font-medium text-red-600 transition-colors hover:border-red-400 hover:bg-red-50"
+							>
+								<svg
+									xmlns="http://www.w3.org/2000/svg"
+									width="14"
+									height="14"
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+								>
+									<polyline points="3 6 5 6 21 6" /><path
+										d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"
+									/><path d="M10 11v6" /><path d="M14 11v6" /><path
+										d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"
+									/>
+								</svg>
+								ลบเกม
+							</button>
+						</div>
 					{/if}
 				</div>
 
@@ -406,5 +453,46 @@
 				{/if}
 			</div>
 		{/if}
+	</div>
+{/if}
+
+<!-- Delete confirmation modal -->
+{#if confirmDelete}
+	<div
+		class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+		role="dialog"
+		aria-modal="true"
+	>
+		<div class="mx-4 w-full max-w-200 rounded-2xl bg-white p-6 shadow-xl">
+			<h3 class="text-base font-semibold text-gray-900">ยืนยันการลบเกม</h3>
+			<p class="mt-2 text-sm text-gray-500">
+				เกม <span class="font-medium text-gray-800">{$gameDetailStore.game?.name}</span>
+				จะถูกลบอย่างถาวร คุณแน่ใจหรือไม่?
+			</p>
+
+			{#if deleteError}
+				<p class="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{deleteError}</p>
+			{/if}
+
+			<div class="mt-5 flex gap-3">
+				<button
+					onclick={() => {
+						confirmDelete = false;
+						deleteError = '';
+					}}
+					disabled={deleting}
+					class="flex-1 rounded-xl border border-gray-200 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50"
+				>
+					ยกเลิก
+				</button>
+				<button
+					onclick={handleDelete}
+					disabled={deleting}
+					class="flex-1 rounded-xl bg-red-500 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-400 disabled:opacity-50"
+				>
+					{deleting ? 'กำลังลบ...' : 'ลบเกม'}
+				</button>
+			</div>
+		</div>
 	</div>
 {/if}

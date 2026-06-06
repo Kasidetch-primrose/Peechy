@@ -82,7 +82,7 @@
 		</div>
 
 		<!-- ! ! Category filter -->
-		<div class="mb-lg flex flex-wrap gap-sm">
+		<!-- <div class="mb-lg flex flex-wrap gap-sm">
 			{#each categories as cat}
 				<button
 					onclick={() => (activeCategory = cat)}
@@ -95,7 +95,7 @@
 					{cat}
 				</button>
 			{/each}
-		</div>
+		</div> -->
 
 		<!-- ! ! Grid -->
 		{#if loading}

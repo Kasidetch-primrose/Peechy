@@ -9,6 +9,7 @@ export interface IGame {
 	name: string;
 	description: string | null;
 	creatorId: number;
+	creatorToken?: string; // only present in the create response, never in GET responses
 	difficulty: string | null;
 	isPublic: boolean | null;
 	likes: number | null;

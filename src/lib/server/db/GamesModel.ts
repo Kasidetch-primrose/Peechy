@@ -7,6 +7,7 @@ export const games = pgTable('games', {
 	name: varchar('name', { length: 255 }).notNull(),
 	description: text('description'),
 	creatorId: integer('creator_id').references(() => users.id),
+	creatorToken: text('creator_token'),
 	difficulty: varchar('difficulty', { length: 50 }),
 	isPublic: boolean('is_public').default(true),
 	likes: integer('likes').default(0),

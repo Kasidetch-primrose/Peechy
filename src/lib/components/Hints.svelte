@@ -2,6 +2,16 @@
 	import { gamePlayStore, revealHint } from '$lib/data/stores/game-play';
 
 	let open = $state(false);
+	let container: HTMLDivElement | undefined;
+
+	$effect(() => {
+		if (!open) return;
+		const handle = (e: PointerEvent) => {
+			if (!container?.contains(e.target as Node)) open = false;
+		};
+		document.addEventListener('pointerdown', handle, true);
+		return () => document.removeEventListener('pointerdown', handle, true);
+	});
 
 	const currentImage = $derived($gamePlayStore.images[$gamePlayStore.imageIdx]);
 	const hints = $derived(
@@ -15,7 +25,7 @@
 	const revealedCount = $derived(hints.filter((h) => revealedIds.includes(h.id)).length);
 </script>
 
-<div class="relative">
+<div class="relative" bind:this={container}>
 	<!-- Toggle button -->
 	<button
 		type="button"
@@ -54,10 +64,6 @@
 	</button>
 
 	{#if open}
-		<!-- Click-outside backdrop -->
-		<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-		<div class="fixed inset-0 z-40" role="presentation" onclick={() => (open = false)}></div>
-
 		<!-- Floating card -->
 		<div
 			class="absolute top-full left-1/2 z-50 mt-2 w-72 -translate-x-1/2 overflow-hidden rounded-2xl border border-primary-100/60 bg-white/95 shadow-xl backdrop-blur-sm"
