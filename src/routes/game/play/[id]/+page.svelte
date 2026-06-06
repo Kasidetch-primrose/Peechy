@@ -12,6 +12,7 @@
 		submitGuess,
 		nextImage
 	} from '$lib/data/stores/game-play';
+	import Hints from '$lib/components/Hints.svelte';
 
 	const gameId = $derived(Number(page.params.id));
 	let finishing = $state(false);
@@ -83,6 +84,12 @@
 		}
 		return `top:${y}px;left:${x}px;width:${w}px;height:${h}px;`;
 	});
+
+	let hints = [
+		'1. ลองเปิดช่องที่ 1 ดูสิ',
+		'2. รูปนี้เกี่ยวกับอาหารนะ',
+		'3. อาหารจานนี้มีชื่อว่าอะไรนะ?'
+	];
 </script>
 
 <svelte:window onkeydown={onKeydown} />
@@ -90,7 +97,7 @@
 {#if $gamePlayStore.loading}
 	<!-- ── Loading ─────────────────────────────────────────────────────────── -->
 	<div
-		class="flex min-h-screen items-center justify-center bg-gradient-to-br from-primary-100/40 via-white to-primary-100/20"
+		class="flex min-h-screen items-center justify-center bg-linear-to-br from-primary-100/40 via-white to-primary-100/20"
 	>
 		<div class="game-enter flex flex-col items-center gap-3 text-primary-500">
 			<svg
@@ -113,7 +120,7 @@
 {:else if $gamePlayStore.error}
 	<!-- ── Error ──────────────────────────────────────────────────────────── -->
 	<div
-		class="flex min-h-screen flex-col items-center justify-center gap-4 bg-gradient-to-br from-primary-100/40 via-white to-primary-100/20"
+		class="flex min-h-screen flex-col items-center justify-center gap-4 bg-linear-to-br from-primary-100/40 via-white to-primary-100/20"
 	>
 		<span class="text-5xl">😕</span>
 		<p class="text-base font-medium">{$gamePlayStore.error}</p>
@@ -127,7 +134,7 @@
 {:else if $gamePlayStore.finished}
 	<!-- ── Finished screen ───────────────────────────────────────────────── -->
 	<div
-		class="flex min-h-screen flex-col items-center justify-center gap-6 bg-gradient-to-br from-primary-100/40 via-white to-primary-100/20 px-4"
+		class="flex min-h-screen flex-col items-center justify-center gap-6 bg-linear-to-br from-primary-100/40 via-white to-primary-100/20 px-4"
 	>
 		<div class="game-enter flex flex-col items-center gap-2">
 			<span class="text-6xl">🎉</span>
@@ -168,7 +175,7 @@
 	{@const shouldShowImage = revealed.length > 0 || status !== 'playing'}
 
 	<div
-		class="game-enter flex h-screen flex-col bg-gradient-to-br from-primary-100/40 via-white to-primary-100/20"
+		class="game-enter flex h-screen flex-col bg-linear-to-br from-primary-100/40 via-white to-primary-100/20"
 	>
 		<!-- ── Top bar ──────────────────────────────────────────────────────── -->
 		<div
@@ -194,6 +201,8 @@
 				</svg>
 				ออก
 			</button>
+
+			<Hints />
 
 			<div class="flex items-center gap-4">
 				<!-- Progress -->
@@ -278,7 +287,7 @@
 					style="{imageAreaStyle} grid-template-columns: repeat({image.gridSize}, 1fr); grid-template-rows: repeat({image.gridSize}, 1fr);"
 				>
 					{#each Array(total) as _, i (i)}
-						{@const isRevealed = revealed.includes(i)}
+						{@const isRevealed = revealed.includes(i) || status !== 'playing'}
 						{@const isInteractive =
 							status === 'playing' &&
 							!isRevealed &&
@@ -324,11 +333,6 @@
 				{/if}
 			</div>
 
-			<!-- ── Hint ────────────────────────────────────────────────────── -->
-			{#if image.hint && status === 'playing'}
-				<p class="shrink-0 text-sm text-gray-600">💡 {image.hint}</p>
-			{/if}
-
 			<!-- ── Answer input ─────────────────────────────────────────────── -->
 			{#if status === 'playing' || status === 'revealed'}
 				<div class="flex w-full shrink-0 flex-col gap-2">
@@ -355,7 +359,13 @@
 							ส่ง
 						</button>
 					</div>
-					<p class="text-center text-xs text-gray-400">Enter เพื่อส่งคำตอบ</p>
+					{#if $gamePlayStore.hintMessage}
+						<p class="text-center text-sm font-medium text-warning">
+							{$gamePlayStore.hintMessage}
+						</p>
+					{:else}
+						<p class="text-center text-xs text-gray-400">Enter เพื่อส่งคำตอบ</p>
+					{/if}
 				</div>
 			{/if}
 

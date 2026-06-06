@@ -1,5 +1,6 @@
 import { db } from '$lib/server/db';
 import { images } from '$lib/server/db/ImagesModel';
+import { imageHints } from '$lib/server/db/ImageHintsModel';
 import { eq, isNull, ilike, and, inArray, sql, asc } from 'drizzle-orm';
 
 // ---------------------------------------------------------------------------
@@ -34,7 +35,7 @@ export type PaginateImagesPayload = {
 
 export async function createOne(data: CreateImageData) {
 	const [created] = await db.insert(images).values(data).returning();
-	return created;
+	return { ...created, hints: [] };
 }
 
 export async function getOne(id: number) {
@@ -42,7 +43,13 @@ export async function getOne(id: number) {
 		.select()
 		.from(images)
 		.where(and(eq(images.id, id), isNull(images.deletedAt)));
-	return item ?? null;
+	if (!item) return null;
+	const hints = await db
+		.select()
+		.from(imageHints)
+		.where(and(eq(imageHints.imageId, id), isNull(imageHints.deletedAt)))
+		.orderBy(asc(imageHints.orderIndex));
+	return { ...item, hints };
 }
 
 export async function updateOne(id: number, data: UpdateImageData) {
@@ -51,7 +58,13 @@ export async function updateOne(id: number, data: UpdateImageData) {
 		.set(data)
 		.where(and(eq(images.id, id), isNull(images.deletedAt)))
 		.returning();
-	return updated ?? null;
+	if (!updated) return null;
+	const hints = await db
+		.select()
+		.from(imageHints)
+		.where(and(eq(imageHints.imageId, id), isNull(imageHints.deletedAt)))
+		.orderBy(asc(imageHints.orderIndex));
+	return { ...updated, hints };
 }
 
 export async function deleteMany(ids: number[]) {
@@ -86,6 +99,41 @@ export async function paginate(payload: PaginateImagesPayload) {
 		.limit(limit)
 		.offset(offset);
 
+	// Attach hints to each image
+	const imageIds = items.map((i) => i.id);
+	const hintsRows =
+		imageIds.length > 0
+			? await db
+					.select()
+					.from(imageHints)
+					.where(and(inArray(imageHints.imageId, imageIds), isNull(imageHints.deletedAt)))
+					.orderBy(asc(imageHints.orderIndex))
+			: [];
+
+	const hintsByImageId = hintsRows.reduce(
+		(acc, h) => {
+			(acc[h.imageId] ??= []).push(h);
+			return acc;
+		},
+		{} as Record<number, typeof hintsRows>
+	);
+
+	const itemsWithHints = items.map((img) => ({ ...img, hints: hintsByImageId[img.id] ?? [] }));
+
 	const pages = Math.ceil(total / limit) || 1;
-	return { items, total, pages };
+	return { items: itemsWithHints, total, pages };
+}
+
+// Replace all hints for an image in one shot
+export async function syncHints(imageId: number, hints: { hint: string; orderIndex: number }[]) {
+	// Hard-delete existing hints for this image
+	await db.delete(imageHints).where(eq(imageHints.imageId, imageId));
+
+	if (hints.length === 0) return [];
+
+	const inserted = await db
+		.insert(imageHints)
+		.values(hints.map((h) => ({ imageId, hint: h.hint, orderIndex: h.orderIndex })))
+		.returning();
+	return inserted;
 }

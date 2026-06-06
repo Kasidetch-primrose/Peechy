@@ -58,4 +58,16 @@ export default class ImageService {
 		});
 		return res.json();
 	}
+
+	static async syncHints(
+		imageId: number,
+		hints: { hint: string; orderIndex: number }[]
+	): Promise<IStatusResponse> {
+		const res = await fetch(`/api/images/${imageId}/hints`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ hints })
+		});
+		return res.json();
+	}
 }

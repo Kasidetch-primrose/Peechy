@@ -7,6 +7,13 @@ import ImageService from '$lib/data/services/image';
 // ── Types ─────────────────────────────────────────────────────────────────────
 export type UploadStatus = 'idle' | 'uploading' | 'done' | 'error';
 
+export type HintSlot = {
+	_id: string;
+	dbId?: number;
+	hint: string;
+	orderIndex: number;
+};
+
 export type ImageSlot = {
 	_id: string;
 	dbId?: number;
@@ -16,7 +23,7 @@ export type ImageSlot = {
 	status: UploadStatus;
 	errorMsg: string;
 	answer: string;
-	hint: string;
+	hints: HintSlot[];
 	gridSize: number;
 	timeLimit: string;
 	maxReveal: string;
@@ -100,7 +107,14 @@ export async function loadEditData(id: number) {
 				status: 'done' as UploadStatus,
 				errorMsg: '',
 				answer: img.answer,
-				hint: img.hint ?? '',
+				hints: [...(img.hints ?? [])]
+					.sort((a, b) => a.orderIndex - b.orderIndex)
+					.map((h) => ({
+						_id: crypto.randomUUID(),
+						dbId: h.id,
+						hint: h.hint,
+						orderIndex: h.orderIndex
+					})),
 				gridSize: img.gridSize,
 				timeLimit: img.timeLimit != null ? String(img.timeLimit) : '',
 				maxReveal: img.maxReveal != null ? String(img.maxReveal) : ''
@@ -122,7 +136,7 @@ export function addSlot() {
 		status: 'idle',
 		errorMsg: '',
 		answer: '',
-		hint: '',
+		hints: [],
 		gridSize: 5,
 		timeLimit: '',
 		maxReveal: ''
@@ -153,7 +167,7 @@ export async function handleDropFiles(files: FileList | File[]) {
 		status: 'uploading' as UploadStatus,
 		errorMsg: '',
 		answer: '',
-		hint: '',
+		hints: [],
 		gridSize: 5,
 		timeLimit: '',
 		maxReveal: ''
@@ -326,7 +340,76 @@ export function removeSlot(slotId: string) {
 	}));
 }
 
-// ── Submit ─────────────────────────────────────────────────────────────────────
+// ── Hint management ────────────────────────────────────────────────────────────
+export function addHint(slotId: string) {
+	gameCreateStore.update((s) => ({
+		...s,
+		slots: s.slots.map((sl) => {
+			if (sl._id !== slotId) return sl;
+			const nextOrder = sl.hints.length;
+			return {
+				...sl,
+				hints: [...sl.hints, { _id: crypto.randomUUID(), hint: '', orderIndex: nextOrder }]
+			};
+		})
+	}));
+}
+
+export function updateHint(slotId: string, hintId: string, value: string) {
+	gameCreateStore.update((s) => ({
+		...s,
+		slots: s.slots.map((sl) => {
+			if (sl._id !== slotId) return sl;
+			return {
+				...sl,
+				hints: sl.hints.map((h) => (h._id === hintId ? { ...h, hint: value } : h))
+			};
+		})
+	}));
+}
+
+export function removeHint(slotId: string, hintId: string) {
+	gameCreateStore.update((s) => ({
+		...s,
+		slots: s.slots.map((sl) => {
+			if (sl._id !== slotId) return sl;
+			const filtered = sl.hints.filter((h) => h._id !== hintId);
+			return {
+				...sl,
+				hints: filtered.map((h, i) => ({ ...h, orderIndex: i }))
+			};
+		})
+	}));
+}
+
+export function moveHintUp(slotId: string, hintId: string) {
+	gameCreateStore.update((s) => ({
+		...s,
+		slots: s.slots.map((sl) => {
+			if (sl._id !== slotId) return sl;
+			const arr = sl.hints.map((h) => ({ ...h }));
+			const idx = arr.findIndex((h) => h._id === hintId);
+			if (idx <= 0) return sl;
+			[arr[idx - 1], arr[idx]] = [arr[idx], arr[idx - 1]];
+			return { ...sl, hints: arr.map((h, i) => ({ ...h, orderIndex: i })) };
+		})
+	}));
+}
+
+export function moveHintDown(slotId: string, hintId: string) {
+	gameCreateStore.update((s) => ({
+		...s,
+		slots: s.slots.map((sl) => {
+			if (sl._id !== slotId) return sl;
+			const arr = sl.hints.map((h) => ({ ...h }));
+			const idx = arr.findIndex((h) => h._id === hintId);
+			if (idx < 0 || idx >= arr.length - 1) return sl;
+			[arr[idx], arr[idx + 1]] = [arr[idx + 1], arr[idx]];
+			return { ...sl, hints: arr.map((h, i) => ({ ...h, orderIndex: i })) };
+		})
+	}));
+}
+
 export async function handleSubmit(e: SubmitEvent, editId: number | null) {
 	e.preventDefault();
 	gameCreateStore.update((s) => ({ ...s, submitError: '' }));
@@ -399,17 +482,26 @@ export async function handleSubmit(e: SubmitEvent, editId: number | null) {
 				gameId,
 				imageUrl: slot.uploadedUrl,
 				answer: slot.answer.trim(),
-				hint: slot.hint.trim() || undefined,
 				gridSize: slot.gridSize,
 				orderIndex: i,
 				timeLimit: slot.timeLimit ? parseInt(slot.timeLimit) : undefined,
 				maxReveal: slot.maxReveal ? parseInt(slot.maxReveal) : undefined
 			};
+			let imageId: number;
 			if (slot.dbId !== undefined) {
 				await ImageService.update(slot.dbId, payload);
+				imageId = slot.dbId;
 			} else {
-				await ImageService.create(payload);
+				const created = await ImageService.create(payload);
+				if (created.status !== 'success') throw new Error('ไม่สามารถบันทึกรูปภาพได้');
+				imageId = created.doc.id;
 			}
+			await ImageService.syncHints(
+				imageId,
+				slot.hints
+					.filter((h) => h.hint.trim())
+					.map((h, idx) => ({ hint: h.hint.trim(), orderIndex: idx }))
+			);
 		}
 
 		goto(`/game/detail/${gameId}`);

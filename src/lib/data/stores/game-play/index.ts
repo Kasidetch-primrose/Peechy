@@ -5,6 +5,7 @@ import GameService from '$lib/data/services/game';
 import ImageService from '$lib/data/services/image';
 import GameSessionService from '$lib/data/services/gameSession';
 import type { IGame, IGameImage, IGameSession } from '$lib/data/interface/game';
+import { checkGuess } from '$lib/utils/check-guess';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 export type RoundStatus = 'playing' | 'correct' | 'wrong' | 'timeout' | 'revealed';
@@ -35,6 +36,12 @@ interface GamePlayState {
 	// Timer
 	timeLeft: number | null; // null = no limit
 
+	// Fuzzy-match hint shown when guess is close but not exact
+	hintMessage: string;
+
+	// Hints revealed for the current round (by hint id)
+	revealedHintIds: number[];
+
 	// Result overlay
 	finished: boolean; // all images done
 }
@@ -53,6 +60,8 @@ const initial: GamePlayState = {
 	wrongShake: false,
 	score: 0,
 	timeLeft: null,
+	hintMessage: '',
+	revealedHintIds: [],
 	finished: false
 };
 
@@ -195,9 +204,25 @@ export function undoReveal() {
 	}));
 }
 
+// ── Hints ─────────────────────────────────────────────────────────────────────
+export function revealHint(hintId: number) {
+	const { status, images, imageIdx, revealedHintIds } = get(gamePlayStore);
+	if (status !== 'playing') return;
+	if (revealedHintIds.includes(hintId)) return;
+
+	const image = images[imageIdx];
+	const penalty = Math.round(100 / (image.gridSize * image.gridSize));
+
+	gamePlayStore.update((s) => ({
+		...s,
+		revealedHintIds: [...s.revealedHintIds, hintId],
+		score: Math.max(0, s.score - penalty)
+	}));
+}
+
 // ── Answer ────────────────────────────────────────────────────────────────────
 export function setGuess(value: string) {
-	gamePlayStore.update((s) => ({ ...s, guess: value }));
+	gamePlayStore.update((s) => ({ ...s, guess: value, hintMessage: '' }));
 }
 
 export function submitGuess() {
@@ -205,19 +230,25 @@ export function submitGuess() {
 	if (status !== 'playing' && status !== 'revealed') return;
 
 	const image = images[imageIdx];
-	const correct = guess.trim().toLowerCase() === image.answer.trim().toLowerCase();
+	const result = checkGuess(guess, image.answer);
 
-	if (correct) {
+	if (result === 'correct') {
 		_clearTimer();
 		const roundScore = _calcRoundScore(image, revealedTiles.length);
 		gamePlayStore.update((s) => ({
 			...s,
 			status: 'correct',
-			score: s.score + roundScore
+			score: s.score + roundScore,
+			hintMessage: ''
 		}));
 		_persistSession();
+	} else if (result === 'close') {
+		gamePlayStore.update((s) => ({
+			...s,
+			hintMessage: 'เกือบถูกแล้ว! ลองตรวจสอบการสะกดอีกครั้ง'
+		}));
 	} else {
-		gamePlayStore.update((s) => ({ ...s, wrongShake: true }));
+		gamePlayStore.update((s) => ({ ...s, wrongShake: true, hintMessage: '' }));
 		setTimeout(() => gamePlayStore.update((s) => ({ ...s, wrongShake: false })), 600);
 	}
 }
@@ -250,6 +281,8 @@ export function nextImage() {
 		undoStack: [],
 		guess: '',
 		status: 'playing',
+		hintMessage: '',
+		revealedHintIds: [],
 		timeLeft: nextImage.timeLimit ?? null
 	}));
 

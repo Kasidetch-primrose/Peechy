@@ -17,6 +17,15 @@ export interface IGame {
 	thumbnailUrl: string | null;
 }
 
+export interface IGameImageHint {
+	id: number;
+	createdAt: string;
+	deletedAt: string | null;
+	imageId: number;
+	hint: string;
+	orderIndex: number;
+}
+
 export interface IGameImage {
 	id: number;
 	createdAt: string;
@@ -26,7 +35,7 @@ export interface IGameImage {
 	imageUrl: string;
 	thumbnailUrl: string | null;
 	answer: string;
-	hint: string | null;
+	hints: IGameImageHint[];
 	gridSize: number;
 	orderIndex: number;
 	timeLimit: number | null;
@@ -96,6 +105,10 @@ export interface ISearchImages {
 	gameId?: number;
 }
 
+export interface ISearchImageHints {
+	imageId?: number;
+}
+
 export interface ISearchGameSessions {
 	userId?: number;
 	gameId?: number;
@@ -131,7 +144,6 @@ export interface ICreateImageRequest {
 	orderIndex: number;
 	name?: string;
 	thumbnailUrl?: string;
-	hint?: string;
 	timeLimit?: number;
 	maxReveal?: number;
 }
@@ -141,11 +153,21 @@ export interface IUpdateImageRequest {
 	imageUrl?: string;
 	thumbnailUrl?: string;
 	answer?: string;
-	hint?: string;
 	gridSize?: number;
 	orderIndex?: number;
 	timeLimit?: number;
 	maxReveal?: number;
+}
+
+export interface ICreateImageHintRequest {
+	imageId: number;
+	hint: string;
+	orderIndex: number;
+}
+
+export interface IUpdateImageHintRequest {
+	hint?: string;
+	orderIndex?: number;
 }
 
 export interface ICreateSessionRequest {

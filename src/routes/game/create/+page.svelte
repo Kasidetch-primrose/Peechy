@@ -36,7 +36,12 @@
 		removeSlot,
 		handleSubmit,
 		updateSlotField,
-		resetGameCreateStore
+		resetGameCreateStore,
+		addHint,
+		updateHint,
+		removeHint,
+		moveHintUp,
+		moveHintDown
 	} from '$lib/data/stores/game-create';
 
 	const editId = $derived(Number(page.url.searchParams.get('id')) || null);
@@ -631,20 +636,129 @@
 										/>
 									</div>
 
-									<!-- ! Hint -->
-									<div class="flex flex-col gap-1">
-										<label for="hint-{slot._id}" class="text-xs font-medium text-gray-700"
-											>คำใบ้ (ไม่บังคับ)</label
-										>
-										<input
-											id="hint-{slot._id}"
-											type="text"
-											value={slot.hint}
-											oninput={(e) =>
-												updateSlotField(slot._id, 'hint', (e.target as HTMLInputElement).value)}
-											placeholder="คำใบ้สำหรับผู้เล่น..."
-											class="rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none placeholder:text-gray-400 focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
-										/>
+									<!-- ! Hints -->
+									<div class="flex flex-col gap-1.5">
+										<div class="flex items-center justify-between">
+											<span class="text-xs font-medium text-gray-700">คำใบ้ (ไม่บังคับ)</span>
+											<button
+												type="button"
+												onclick={() => addHint(slot._id)}
+												class="bg-primary-50 flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-primary-600 transition-colors hover:bg-primary-100"
+											>
+												<svg
+													xmlns="http://www.w3.org/2000/svg"
+													width="10"
+													height="10"
+													viewBox="0 0 24 24"
+													fill="none"
+													stroke="currentColor"
+													stroke-width="2.5"
+													stroke-linecap="round"
+													stroke-linejoin="round"
+												>
+													<line x1="12" y1="5" x2="12" y2="19" /><line
+														x1="5"
+														y1="12"
+														x2="19"
+														y2="12"
+													/>
+												</svg>
+												เพิ่มคำใบ้
+											</button>
+										</div>
+
+										{#if slot.hints.length === 0}
+											<p class="text-xs text-gray-400">
+												ยังไม่มีคำใบ้ · กด "เพิ่มคำใบ้" เพื่อเพิ่ม
+											</p>
+										{:else}
+											<ul class="flex flex-col gap-1.5">
+												{#each slot.hints as h (h._id)}
+													<li class="flex items-center gap-1.5">
+														<!-- order badge -->
+														<span
+															class="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-warning/15 text-xs font-bold text-warning"
+														>
+															{h.orderIndex + 1}
+														</span>
+														<!-- input -->
+														<input
+															type="text"
+															value={h.hint}
+															oninput={(e) =>
+																updateHint(slot._id, h._id, (e.target as HTMLInputElement).value)}
+															placeholder="ข้อความคำใบ้..."
+															class="flex-1 rounded-lg border border-gray-200 px-2.5 py-1.5 text-sm outline-none placeholder:text-gray-400 focus:border-warning/60 focus:ring-2 focus:ring-warning/10"
+														/>
+														<!-- move up -->
+														<button
+															type="button"
+															onclick={() => moveHintUp(slot._id, h._id)}
+															disabled={h.orderIndex === 0}
+															aria-label="เลื่อนขึ้น"
+															class="rounded p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 disabled:opacity-30"
+														>
+															<svg
+																xmlns="http://www.w3.org/2000/svg"
+																width="12"
+																height="12"
+																viewBox="0 0 24 24"
+																fill="none"
+																stroke="currentColor"
+																stroke-width="2.5"
+																stroke-linecap="round"
+																stroke-linejoin="round"
+															>
+																<path d="m18 15-6-6-6 6" />
+															</svg>
+														</button>
+														<!-- move down -->
+														<button
+															type="button"
+															onclick={() => moveHintDown(slot._id, h._id)}
+															disabled={h.orderIndex === slot.hints.length - 1}
+															aria-label="เลื่อนลง"
+															class="rounded p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 disabled:opacity-30"
+														>
+															<svg
+																xmlns="http://www.w3.org/2000/svg"
+																width="12"
+																height="12"
+																viewBox="0 0 24 24"
+																fill="none"
+																stroke="currentColor"
+																stroke-width="2.5"
+																stroke-linecap="round"
+																stroke-linejoin="round"
+															>
+																<path d="m6 9 6 6 6-6" />
+															</svg>
+														</button>
+														<!-- delete -->
+														<button
+															type="button"
+															onclick={() => removeHint(slot._id, h._id)}
+															aria-label="ลบคำใบ้"
+															class="rounded p-1 text-gray-400 transition-colors hover:bg-red-50 hover:text-error"
+														>
+															<svg
+																xmlns="http://www.w3.org/2000/svg"
+																width="12"
+																height="12"
+																viewBox="0 0 24 24"
+																fill="none"
+																stroke="currentColor"
+																stroke-width="2.5"
+																stroke-linecap="round"
+																stroke-linejoin="round"
+															>
+																<path d="M18 6 6 18" /><path d="m6 6 12 12" />
+															</svg>
+														</button>
+													</li>
+												{/each}
+											</ul>
+										{/if}
 									</div>
 
 									<!-- ! Grid · Time · MaxReveal -->
