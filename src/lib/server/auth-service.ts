@@ -1,10 +1,10 @@
-import { eq } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import { randomInt } from 'node:crypto';
 import { env } from '$env/dynamic/private';
 import { db } from './db';
-import { users } from './db/UserModel';
+import { users, userOAuthAccounts } from './db/UserModel';
 import { redis } from './utils/redis';
 import { mailer } from './utils/mailer';
 
@@ -311,4 +311,141 @@ export async function refreshAccessToken(token: string) {
  */
 export async function logout(userId: number) {
 	await tryRedisWrite('delete refresh token', () => redis.del(refreshKey(userId)));
+}
+
+// ---------------------------------------------------------------------------
+// OAuth login / register
+// ---------------------------------------------------------------------------
+
+/**
+ * Finds or creates a user for a given OAuth provider account.
+ * Priority: existing OAuth link → email match (link account) → create new user.
+ */
+export async function loginWithOAuth(
+	provider: string,
+	providerUserId: string,
+	email: string | null,
+	name: string | null
+) {
+	// 1. Existing OAuth account → return its user
+	const [existingOAuth] = await db
+		.select({ userId: userOAuthAccounts.userId })
+		.from(userOAuthAccounts)
+		.where(
+			and(
+				eq(userOAuthAccounts.provider, provider),
+				eq(userOAuthAccounts.providerUserId, providerUserId)
+			)
+		)
+		.limit(1);
+
+	if (existingOAuth) {
+		const [user] = await db
+			.select({
+				id: users.id,
+				email: users.email,
+				username: users.username,
+				name: users.name,
+				deletedAt: users.deletedAt
+			})
+			.from(users)
+			.where(eq(users.id, existingOAuth.userId))
+			.limit(1);
+
+		if (!user || user.deletedAt) throw new Error('User not found');
+
+		const { accessToken, refreshToken } = generateTokens(
+			user.id,
+			user.email,
+			user.username,
+			user.name
+		);
+		await tryRedisWrite('store refresh token', () =>
+			redis.set(refreshKey(user.id), refreshToken, 'EX', REFRESH_TOKEN_SECONDS)
+		);
+		return {
+			accessToken,
+			refreshToken,
+			user: { id: user.id, email: user.email, username: user.username, name: user.name }
+		};
+	}
+
+	// 2. Email match → link OAuth account to existing user
+	if (email) {
+		const [existingUser] = await db.select().from(users).where(eq(users.email, email)).limit(1);
+
+		if (existingUser && !existingUser.deletedAt) {
+			await db
+				.insert(userOAuthAccounts)
+				.values({ userId: existingUser.id, provider, providerUserId });
+
+			const { accessToken, refreshToken } = generateTokens(
+				existingUser.id,
+				existingUser.email,
+				existingUser.username,
+				existingUser.name
+			);
+			await tryRedisWrite('store refresh token', () =>
+				redis.set(refreshKey(existingUser.id), refreshToken, 'EX', REFRESH_TOKEN_SECONDS)
+			);
+			return {
+				accessToken,
+				refreshToken,
+				user: {
+					id: existingUser.id,
+					email: existingUser.email,
+					username: existingUser.username,
+					name: existingUser.name
+				}
+			};
+		}
+	}
+
+	// 3. Create new user
+	const base = (email ? email.split('@')[0] : name ?? 'user')
+		.replace(/[^a-z0-9_]/gi, '')
+		.toLowerCase()
+		.slice(0, 30) || 'user';
+
+	let username = base;
+	let suffix = 0;
+	while (true) {
+		const [taken] = await db
+			.select({ id: users.id })
+			.from(users)
+			.where(eq(users.username, username))
+			.limit(1);
+		if (!taken) break;
+		suffix++;
+		username = `${base}${suffix}`;
+	}
+
+	const [newUser] = await db
+		.insert(users)
+		.values({
+			username,
+			email: email ?? `${provider}_${providerUserId}@oauth.peechy.app`,
+			password: '',
+			name,
+			isVerified: true
+		})
+		.returning({ id: users.id, email: users.email, username: users.username, name: users.name });
+
+	await db.insert(userOAuthAccounts).values({ userId: newUser.id, provider, providerUserId });
+
+	const { accessToken, refreshToken } = generateTokens(
+		newUser.id,
+		newUser.email,
+		newUser.username,
+		newUser.name
+	);
+	await tryRedisWrite('store refresh token', () =>
+		redis.set(refreshKey(newUser.id), refreshToken, 'EX', REFRESH_TOKEN_SECONDS)
+	);
+
+	return {
+		accessToken,
+		refreshToken,
+		user: { id: newUser.id, email: newUser.email, username: newUser.username, name: newUser.name }
+	};
 }

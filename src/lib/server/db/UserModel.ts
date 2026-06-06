@@ -5,7 +5,8 @@ import {
 	boolean,
 	integer,
 	timestamp,
-	primaryKey
+	primaryKey,
+	uniqueIndex
 } from 'drizzle-orm/pg-core';
 import { baseColumns } from './base';
 
@@ -39,5 +40,18 @@ export const userSavedGames = pgTable(
 	},
 	(t) => ({
 		pk: primaryKey({ columns: [t.userId, t.gameId] })
+	})
+);
+
+export const userOAuthAccounts = pgTable(
+	'user_oauth_accounts',
+	{
+		...baseColumns,
+		userId: integer('user_id').notNull(),
+		provider: varchar('provider', { length: 50 }).notNull(),
+		providerUserId: varchar('provider_user_id', { length: 255 }).notNull()
+	},
+	(t) => ({
+		uniqAccount: uniqueIndex('uq_oauth_provider_account').on(t.provider, t.providerUserId)
 	})
 );

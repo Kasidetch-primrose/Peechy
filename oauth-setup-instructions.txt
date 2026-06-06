@@ -1,0 +1,83 @@
+================================================================
+  GOOGLE & FACEBOOK OAUTH SETUP INSTRUCTIONS FOR PEECHY
+================================================================
+
+Both Google and Facebook OAuth are completely FREE to use.
+
+----------------------------------------------------------------
+  GOOGLE OAUTH
+----------------------------------------------------------------
+
+1. Go to: https://console.cloud.google.com
+
+2. Create a new project (or select an existing one)
+
+3. Left menu -> APIs & Services -> OAuth consent screen
+   - Choose "External"
+   - Fill in app name and your email
+   - Save and continue
+
+4. Left menu -> APIs & Services -> Credentials
+   - Click "Create Credentials" -> "OAuth client ID"
+   - Application type: Web application
+   - Under "Authorized redirect URIs", add:
+
+     LOCAL DEV:
+       http://localhost:5173/api/auth/oauth/google/callback
+
+     PRODUCTION (add when you deploy):
+       https://yourdomain.com/api/auth/oauth/google/callback
+
+   - Click "Create"
+
+5. Copy the Client ID and Client Secret shown in the popup
+
+
+----------------------------------------------------------------
+  FACEBOOK OAUTH
+----------------------------------------------------------------
+
+1. Go to: https://developers.facebook.com
+
+2. Click "My Apps" -> "Create App"
+   - Choose "Authenticate and request data from users with Facebook Login"
+
+3. Once created, go to Use Cases -> find "Facebook Login" -> Customize
+
+4. Under "Valid OAuth redirect URIs", add:
+
+     LOCAL DEV:
+       http://localhost:5173/api/auth/oauth/facebook/callback
+
+     PRODUCTION (add when you deploy):
+       https://yourdomain.com/api/auth/oauth/facebook/callback
+
+5. Left sidebar -> App settings -> Basic
+   - App ID     = FACEBOOK_CLIENT_ID
+   - App Secret = FACEBOOK_CLIENT_SECRET
+
+
+----------------------------------------------------------------
+  ADD TO YOUR .env FILE
+----------------------------------------------------------------
+
+GOOGLE_CLIENT_ID=your_google_client_id_here
+GOOGLE_CLIENT_SECRET=your_google_client_secret_here
+FACEBOOK_CLIENT_ID=your_facebook_app_id_here
+FACEBOOK_CLIENT_SECRET=your_facebook_app_secret_here
+
+
+----------------------------------------------------------------
+  NOTES
+----------------------------------------------------------------
+
+- For local development, redirect URIs must use http://localhost:5173
+  (or whichever port your dev server runs on, check terminal output)
+
+- When deploying to production, add your https:// URLs in BOTH
+  the Google Cloud Console and Facebook App Dashboard
+
+- The app will not work until the env vars are set and the
+  redirect URIs are registered in both dashboards
+
+================================================================
