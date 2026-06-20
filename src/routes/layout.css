@@ -4,24 +4,27 @@
 /* ─────────────────────────────────────────────────────────────────────────────
  * Peechy Design Tokens — Tailwind v4 @theme
  * All tokens below become Tailwind utility classes automatically.
- * See doc/styling.md for full usage guide.
  * ───────────────────────────────────────────────────────────────────────────── */
 @theme {
-	/* ── Primary (Peach Brand) ─────────────────────────────────────────────
-	 * Utilities: bg-primary-*, text-primary-*, border-primary-*,
-	 *            ring-primary-*, fill-primary-*, stroke-primary-*
+	/* ── Primary (Pastel Peach / Orange Brand) ─────────────────────────────
+	 * Utilities: bg-primary-*, text-primary-*, border-primary-*
 	 * ─────────────────────────────────────────────────────────────────── */
+	--color-primary-50: #fff5f0;
 	--color-primary-100: #ffe5dc;
+	--color-primary-200: #ffd0bc;
+	--color-primary-300: #ffba9c;
 	--color-primary-400: #ffb199;
 	--color-primary-500: #ff9b73;
 	--color-primary-600: #e87c5a;
 
-	/* ── Secondary (Support / Fun) ─────────────────────────────────────────
-	 * Utilities: bg-secondary-yellow, text-secondary-green, etc.
+	/* ── Secondary (Colorful Pastel Accents) ───────────────────────────────
+	 * Utilities: bg-secondary-yellow, bg-secondary-mint, etc.
 	 * ─────────────────────────────────────────────────────────────────── */
-	--color-secondary-yellow: #ffd166;
-	--color-secondary-green: #6bcb77;
-	--color-secondary-blue: #4d96ff;
+	--color-secondary-yellow: #ffe4a0;
+	--color-secondary-mint: #a8edcc;
+	--color-secondary-sky: #a8d8ff;
+	--color-secondary-lavender: #d4b8ff;
+	--color-secondary-coral: #ffaab0;
 
 	/* ── Neutral / Gray ────────────────────────────────────────────────────
 	 * Utilities: bg-gray-*, text-gray-*, border-gray-*
@@ -41,8 +44,6 @@
 	--color-info: #4d96ff;
 
 	/* ── Button State Colors ───────────────────────────────────────────────
-	 * Utilities: bg-btn-primary, bg-btn-primary-hover, etc.
-	 * (Use these with Tailwind's arbitrary value or CSS vars for hover state variants)
 	 * ─────────────────────────────────────────────────────────────────── */
 	--color-btn-primary: #ff9b73;
 	--color-btn-primary-hover: #ffb199;
@@ -63,7 +64,7 @@
 	/* ── Font Families ─────────────────────────────────────────────────────
 	 * Utilities: font-sans, font-mono
 	 * ─────────────────────────────────────────────────────────────────── */
-	--font-sans: 'Noto Sans Thai', 'Inter', ui-sans-serif, system-ui, sans-serif;
+	--font-sans: 'Kanit', 'Noto Sans Thai', ui-sans-serif, system-ui, sans-serif;
 	--font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
 
 	/* ── Border Radius ─────────────────────────────────────────────────────
@@ -76,17 +77,15 @@
 	--radius-2xl: 1.5rem; /* 24px */
 
 	/* ── Spacing ───────────────────────────────────────────────────────────
-	 * Utilities: p-*, m-*, gap-*, w-*, h-*, space-*, etc.
-	 * e.g. p-sm, mx-lg, gap-md
 	 * ─────────────────────────────────────────────────────────────────── */
-	--spacing-2xs: 0.125rem; /*  2px */
-	--spacing-xs: 0.25rem; /*  4px */
-	--spacing-sm: 0.5rem; /*  8px */
-	--spacing-md: 1rem; /* 16px */
-	--spacing-lg: 1.5rem; /* 24px */
-	--spacing-xl: 2rem; /* 32px */
-	--spacing-2xl: 3rem; /* 48px */
-	--spacing-3xl: 4rem; /* 64px */
+	--spacing-2xs: 0.125rem;
+	--spacing-xs: 0.25rem;
+	--spacing-sm: 0.5rem;
+	--spacing-md: 1rem;
+	--spacing-lg: 1.5rem;
+	--spacing-xl: 2rem;
+	--spacing-2xl: 3rem;
+	--spacing-3xl: 4rem;
 }
 
 /* ── Global focus ring ──────────────────────────────────────────────────────── */
@@ -95,30 +94,57 @@
 	outline-offset: 2px;
 }
 
-/* ── Global page background ─────────────────────────────────────────────────── */
+/* ── Global page background — warm peach → cream → cool mint ────────────────── */
 html,
 body {
 	min-height: 100%;
-	background: linear-gradient(
-		135deg,
-		rgba(255, 229, 220, 0.35) 0%,
-		#ffffff 50%,
-		rgba(255, 229, 220, 0.2) 100%
-	);
+	background: linear-gradient(160deg, #ffeadc 0%, #fff5e8 40%, #fffbf5 65%, #f0fff8 100%);
 	background-attachment: fixed;
 }
 
-/* ── Entrance animation (available globally) ─────────────────────────────────── */
+/* ── Entrance animation ──────────────────────────────────────────────────────── */
 @keyframes game-enter {
 	from {
 		opacity: 0;
-		transform: translateY(10px);
+		transform: translateY(16px) scale(0.98);
 	}
 	to {
 		opacity: 1;
-		transform: translateY(0);
+		transform: translateY(0) scale(1);
 	}
 }
 .game-enter {
-	animation: game-enter 0.4s ease-out both;
+	animation: game-enter 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+/* ── Float animation ─────────────────────────────────────────────────────────── */
+@keyframes float {
+	0%,
+	100% {
+		transform: translateY(0px);
+	}
+	50% {
+		transform: translateY(-8px);
+	}
+}
+.float {
+	animation: float 3s ease-in-out infinite;
+}
+
+/* ── Pop-in animation ────────────────────────────────────────────────────────── */
+@keyframes pop-in {
+	0% {
+		opacity: 0;
+		transform: scale(0.8);
+	}
+	70% {
+		transform: scale(1.05);
+	}
+	100% {
+		opacity: 1;
+		transform: scale(1);
+	}
+}
+.pop-in {
+	animation: pop-in 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }

@@ -1,19 +1,24 @@
-// ─── Primary (Peach Brand) ───────────────────────────────────────────────────
+// ─── Primary (Pastel Peach / Orange Brand) ────────────────────────────────────
 export const primary = {
+	50: '#FFF5F0',
 	100: '#FFE5DC',
+	200: '#FFD0BC',
+	300: '#FFBA9C',
 	400: '#FFB199',
 	500: '#FF9B73',
 	600: '#E87C5A'
 } as const;
 
-// ─── Secondary (Support / Fun) ───────────────────────────────────────────────
+// ─── Secondary (Colorful Pastel Accents) ──────────────────────────────────────
 export const secondary = {
-	yellow: '#FFD166',
-	green: '#6BCB77',
-	blue: '#4D96FF'
+	yellow: '#FFE4A0',
+	mint: '#A8EDCC',
+	sky: '#A8D8FF',
+	lavender: '#D4B8FF',
+	coral: '#FFAAB0'
 } as const;
 
-// ─── Neutral (UI / Readability) ──────────────────────────────────────────────
+// ─── Neutral (UI / Readability) ───────────────────────────────────────────────
 export const gray = {
 	100: '#F3F4F6',
 	200: '#E5E7EB',
@@ -24,7 +29,7 @@ export const gray = {
 
 export const white = '#FFFFFF' as const;
 
-// ─── Semantic ────────────────────────────────────────────────────────────────
+// ─── Semantic ─────────────────────────────────────────────────────────────────
 export const semantic = {
 	success: '#6BCB77',
 	error: '#FF6B6B',
@@ -32,7 +37,7 @@ export const semantic = {
 	info: '#4D96FF'
 } as const;
 
-// ─── Button States ───────────────────────────────────────────────────────────
+// ─── Button States ────────────────────────────────────────────────────────────
 export const button = {
 	primary: {
 		default: '#FF9B73',
@@ -55,10 +60,10 @@ export const button = {
 	}
 } as const;
 
-// ─── Focus ───────────────────────────────────────────────────────────────────
+// ─── Focus ────────────────────────────────────────────────────────────────────
 export const focus = '#FFB199' as const;
 
-// ─── Flat map (for easy lookup) ──────────────────────────────────────────────
+// ─── Flat map (for easy lookup) ───────────────────────────────────────────────
 export const AppColors = {
 	primary,
 	secondary,

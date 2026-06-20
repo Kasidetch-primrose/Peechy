@@ -25,10 +25,10 @@
 </script>
 
 <header
-	class="sticky top-0 z-50 border-b border-primary-100/80 bg-white/75 shadow-sm backdrop-blur-md"
+	class="sticky top-0 z-50 border-b border-primary-200/60 bg-primary-100/80 shadow-sm shadow-primary-200/40 backdrop-blur-md"
 >
 	<nav class="mx-auto flex max-w-6xl items-center justify-between px-lg py-sm">
-		<!-- ! Logo -->
+		<!-- Logo -->
 		<a
 			href="/"
 			class="flex items-center gap-sm text-xl font-bold text-primary-500
@@ -38,14 +38,15 @@
 			Peechy 🍑
 		</a>
 
-		<!-- ! Desktop links -->
-		<ul class="hidden items-center gap-lg md:flex" role="list">
+		<!-- Desktop links -->
+		<ul class="hidden items-center gap-sm md:flex" role="list">
 			{#each navLinks as link}
 				<li>
 					<a
 						href={link.href}
-						class="rounded-sm text-sm font-medium text-gray-700 transition-colors
-                               hover:text-primary-500 focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:outline-none"
+						class="rounded-full px-sm py-xs text-sm font-medium text-gray-700 transition-colors
+                               hover:bg-primary-100 hover:text-primary-500
+                               focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:outline-none"
 					>
 						{link.label}
 					</a>
@@ -53,13 +54,14 @@
 			{/each}
 		</ul>
 
-		<!-- ! Desktop CTA -->
+		<!-- Desktop CTA -->
 		<div class="hidden items-center gap-sm md:flex">
 			{#if $authUserStore.user}
 				<div class="flex items-center gap-3">
 					<a
 						href={`/profile/${$authUserStore.user.id}`}
-						class="border-primary-200 bg-primary-50 text-primary-700 flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm hover:bg-primary-100 focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:outline-none"
+						class="flex items-center gap-2 rounded-full border border-primary-300 bg-primary-100 px-3 py-1.5 text-sm text-primary-600
+                               hover:bg-primary-200 focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:outline-none"
 					>
 						<span class="h-2 w-2 rounded-full bg-primary-500"></span>
 						<span class="font-medium">{$authUserStore.user.username}</span>
@@ -67,7 +69,7 @@
 					<button
 						type="button"
 						onclick={handleLogout}
-						class="rounded-lg border border-red-200 px-md py-xs text-sm font-medium text-red-600 transition-colors hover:bg-red-50 focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:outline-none"
+						class="rounded-full border border-red-200 px-md py-xs text-sm font-medium text-red-500 transition-colors hover:bg-red-50 focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:outline-none"
 					>
 						ออกจากระบบ
 					</button>
@@ -75,7 +77,7 @@
 			{:else}
 				<a
 					href="/auth/login"
-					class="rounded-lg border border-primary-500 px-md py-xs text-sm font-medium text-primary-500
+					class="rounded-full border border-primary-500 px-md py-xs text-sm font-medium text-primary-500
                        transition-colors hover:bg-primary-100
                        focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:outline-none"
 				>
@@ -83,7 +85,7 @@
 				</a>
 				<a
 					href="/auth/register"
-					class="rounded-lg bg-primary-500 px-md py-xs text-sm font-medium text-white
+					class="rounded-full bg-primary-500 px-md py-xs text-sm font-medium text-white
                        transition-colors hover:bg-primary-400 focus-visible:ring-2
                        focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:outline-none active:bg-primary-600"
 				>
@@ -92,16 +94,15 @@
 			{/if}
 		</div>
 
-		<!-- ! Mobile hamburger -->
+		<!-- Mobile hamburger -->
 		<button
-			class="hover:bg-primary-300/60 flex items-center justify-center rounded-md p-xs text-primary-600
-                   focus-visible:ring-2 focus-visible:ring-focus focus-visible:outline-none md:hidden"
+			class="flex items-center justify-center rounded-full p-xs text-primary-500 transition-colors
+                   hover:bg-primary-100 focus-visible:ring-2 focus-visible:ring-focus focus-visible:outline-none md:hidden"
 			onclick={() => (mobileMenuOpen = !mobileMenuOpen)}
 			aria-label="Toggle menu"
 			aria-expanded={mobileMenuOpen}
 		>
 			{#if mobileMenuOpen}
-				<!-- ! X icon -->
 				<svg
 					xmlns="http://www.w3.org/2000/svg"
 					width="22"
@@ -117,7 +118,6 @@
 					<line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
 				</svg>
 			{:else}
-				<!-- ! Hamburger icon -->
 				<svg
 					xmlns="http://www.w3.org/2000/svg"
 					width="22"
@@ -141,26 +141,26 @@
 		</button>
 	</nav>
 
-	<!-- ! Mobile menu -->
+	<!-- Mobile menu -->
 	{#if mobileMenuOpen}
-		<div class="border-t border-primary-100/60 bg-white/85 px-lg py-md backdrop-blur-md md:hidden">
+		<div class="border-t border-primary-200/60 bg-primary-100/90 px-lg py-md backdrop-blur-md md:hidden">
 			<ul class="flex flex-col gap-md" role="list">
 				{#each navLinks as link}
 					<li>
 						<a
 							href={link.href}
-							class="block text-sm font-medium text-gray-700 hover:text-primary-600"
+							class="block rounded-full px-sm py-xs text-sm font-medium text-gray-700 hover:bg-primary-100 hover:text-primary-500"
 							onclick={() => (mobileMenuOpen = false)}
 						>
 							{link.label}
 						</a>
 					</li>
 				{/each}
-				<li class="border-t border-gray-200 pt-md">
+				<li class="border-t border-primary-200/50 pt-md">
 					{#if $authUserStore.user}
 						<div class="flex flex-col gap-2">
 							<div
-								class="border-primary-200 bg-primary-50 text-primary-700 flex items-center gap-2 rounded-xl border px-4 py-3 text-sm"
+								class="flex items-center gap-2 rounded-2xl border border-primary-300 bg-primary-100 px-4 py-3 text-sm text-primary-600"
 							>
 								<span class="h-2 w-2 rounded-full bg-primary-500"></span>
 								<span class="font-medium">@{$authUserStore.user.username}</span>
@@ -168,7 +168,7 @@
 							<button
 								type="button"
 								onclick={handleLogout}
-								class="rounded-lg border border-red-200 px-md py-sm text-center text-sm font-medium text-red-600 hover:bg-red-50"
+								class="rounded-full border border-red-200 px-md py-sm text-center text-sm font-medium text-red-500 hover:bg-red-50"
 							>
 								ออกจากระบบ
 							</button>
@@ -177,14 +177,14 @@
 						<div class="flex flex-col gap-sm">
 							<a
 								href="/auth/login"
-								class="rounded-lg border border-primary-500 px-md py-sm text-center text-sm font-medium text-primary-500 hover:bg-primary-100"
+								class="rounded-full border border-primary-500 px-md py-sm text-center text-sm font-medium text-primary-500 hover:bg-primary-100"
 								onclick={() => (mobileMenuOpen = false)}
 							>
 								เข้าสู่ระบบ
 							</a>
 							<a
 								href="/auth/register"
-								class="rounded-lg bg-primary-500 px-md py-sm text-center text-sm font-medium text-white hover:bg-primary-400"
+								class="rounded-full bg-primary-500 px-md py-sm text-center text-sm font-medium text-white hover:bg-primary-400"
 								onclick={() => (mobileMenuOpen = false)}
 							>
 								สมัครสมาชิก

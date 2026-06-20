@@ -4,14 +4,14 @@
 	import type { IGame } from '$lib/data/interface/game';
 
 	const COVER_COLORS = [
+		'#FFD4A8',
+		'#FFE4A0',
+		'#A8EDCC',
+		'#A8D8FF',
+		'#D4B8FF',
+		'#FFAAB0',
 		'#FFE5DC',
-		'#E8F4FF',
-		'#F0FFF4',
-		'#FFFBEA',
-		'#F5F3FF',
-		'#E6F7FF',
-		'#FFF0F6',
-		'#F0F9FF'
+		'#A8F0E0'
 	];
 	const EMOJIS = ['🎮', '🧩', '⚡', '🃏', '🏆', '📝', '🌍', '🎯', '🔥', '💡'];
 
@@ -88,8 +88,8 @@
 
 	<a href={`/game/detail/${game.id}`} class="block" aria-label={`เปิดรายละเอียดเกม ${game.name}`}>
 		<article
-			class="group flex cursor-pointer flex-col overflow-hidden rounded-2xl border border-primary-100/60 bg-white/85 shadow-sm
-         transition-all duration-200 hover:-translate-y-1.5 hover:border-primary-400/30 hover:shadow-lg"
+			class="group flex cursor-pointer flex-col overflow-hidden rounded-2xl border-2 border-primary-200/70 bg-primary-50/95 shadow-md shadow-primary-200/40
+         transition-all duration-200 hover:-translate-y-2 hover:border-primary-400/60 hover:shadow-xl hover:shadow-primary-300/40"
 		>
 			<!-- ! Cover -->
 			{#if game.thumbnailUrl}
@@ -118,7 +118,7 @@
 					{game.name}
 				</h3>
 
-				<p class="line-clamp-2 flex-1 text-sm leading-normal text-gray-700">
+				<p class="line-clamp-1 min-h-6 flex-1 truncate text-sm leading-normal text-gray-700">
 					{game.description}
 				</p>
 
@@ -150,7 +150,7 @@
 						<span class="text-xs text-gray-400">{likes.toLocaleString()}</span>
 
 						<span
-							class="rounded-lg bg-primary-500 px-md py-xs text-xs font-medium text-white
+							class="rounded-full bg-primary-500 px-md py-xs text-xs font-semibold text-white
                        transition-colors hover:bg-primary-400 focus-visible:ring-2
                        focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:outline-none active:bg-primary-600"
 						>

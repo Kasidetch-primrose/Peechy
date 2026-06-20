@@ -215,7 +215,9 @@
 					</div>
 
 					{#if game.description}
-						<p class="max-w-2xl text-sm leading-relaxed text-gray-600">{game.description}</p>
+						<p class="text-sm leading-relaxed text-gray-600 wrap-break-word">
+							{game.description}
+						</p>
 					{/if}
 				</div>
 
@@ -420,7 +422,7 @@
 							class="group relative aspect-square overflow-hidden rounded-xl border-2 transition-all {i ===
 							$gameDetailStore.activeImageIdx
 								? 'border-primary-500 shadow-md'
-								: 'hover:border-primary-200 border-transparent'}"
+								: 'border-transparent hover:border-primary-200'}"
 						>
 							<img
 								src={img.imageUrl}

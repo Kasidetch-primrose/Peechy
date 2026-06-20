@@ -52,7 +52,7 @@
 
 		<!-- Card -->
 		<div
-			class="rounded-2xl border border-primary-100/60 bg-white/80 p-8 shadow-md backdrop-blur-sm"
+			class="rounded-2xl border-2 border-primary-200/60 bg-primary-50/90 p-8 shadow-md shadow-primary-200/30 backdrop-blur-sm"
 		>
 			<form onsubmit={handleSubmit} class="flex flex-col gap-5">
 				<!-- Email -->
