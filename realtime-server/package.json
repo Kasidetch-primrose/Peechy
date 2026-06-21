@@ -1,0 +1,23 @@
+{
+	"name": "peechy-realtime-server",
+	"private": true,
+	"version": "0.0.1",
+	"type": "module",
+	"scripts": {
+		"dev": "tsx watch src/index.ts",
+		"build": "tsc -p tsconfig.json",
+		"start": "node dist/index.js"
+	},
+	"dependencies": {
+		"dotenv": "^16.4.5",
+		"fuse.js": "^7.4.0",
+		"ioredis": "^5.10.1",
+		"postgres": "^3.4.8",
+		"socket.io": "^4.8.1"
+	},
+	"devDependencies": {
+		"@types/node": "^22",
+		"tsx": "^4.19.2",
+		"typescript": "^5.9.3"
+	}
+}

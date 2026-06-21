@@ -11,10 +11,37 @@
 		difficultyLabel,
 		difficultyBg
 	} from '$lib/data/stores/game-detail';
+	import { authUserStore } from '$lib/data/stores/authUser';
+	import { connect, createRoom } from '$lib/data/stores/multiplayer';
+	import type { TurnDuration } from '$lib/data/interface/multiplayer';
 
 	let confirmDelete = $state(false);
 	let deleting = $state(false);
 	let deleteError = $state('');
+
+	let showMultiplayerModal = $state(false);
+	let turnDuration = $state<TurnDuration>(30);
+	let creatingRoom = $state(false);
+	let createRoomError = $state('');
+
+	async function handleCreateRoom() {
+		const user = $authUserStore.user;
+		const id = $gameDetailStore.game?.id;
+		if (!user || !id) {
+			goto('/auth/login');
+			return;
+		}
+		creatingRoom = true;
+		createRoomError = '';
+		connect(String(user.id), user.username);
+		const code = await createRoom(id, turnDuration);
+		creatingRoom = false;
+		if (!code) {
+			createRoomError = 'สร้างห้องไม่สำเร็จ ลองอีกครั้ง';
+			return;
+		}
+		goto(`/game/multiplayer/lobby/${code}`);
+	}
 
 	async function handleDelete() {
 		const id = $gameDetailStore.game?.id;
@@ -215,7 +242,7 @@
 					</div>
 
 					{#if game.description}
-						<p class="text-sm leading-relaxed text-gray-600 wrap-break-word">
+						<p class="text-sm leading-relaxed wrap-break-word text-gray-600">
 							{game.description}
 						</p>
 					{/if}
@@ -284,14 +311,24 @@
 					</div>
 				</div>
 
-				<!-- ! Play button -->
-				<div class="mt-5">
+				<!-- ! Play buttons -->
+				<div class="mt-5 flex flex-wrap gap-3">
 					<button
 						onclick={() => goto(`/game/play/${game!.id}`)}
 						disabled={images.length === 0}
 						class="rounded-xl bg-primary-500 px-8 py-3 text-base font-semibold text-white shadow-sm transition-colors hover:bg-primary-400 active:bg-primary-600 disabled:cursor-not-allowed disabled:bg-btn-primary-disabled"
 					>
 						{images.length === 0 ? 'ยังไม่มีรูปภาพ' : '▶ เริ่มเล่น'}
+					</button>
+					<button
+						onclick={() => {
+							showMultiplayerModal = true;
+							createRoomError = '';
+						}}
+						disabled={images.length === 0}
+						class="rounded-xl border border-primary-400/50 px-8 py-3 text-base font-semibold text-primary-600 transition-colors hover:bg-primary-100 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
+					>
+						👥 เล่นหลายคน
 					</button>
 				</div>
 			</div>
@@ -458,6 +495,56 @@
 	</div>
 {/if}
 
+<!-- Multiplayer room creation modal -->
+{#if showMultiplayerModal}
+	<div
+		class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+		role="dialog"
+		aria-modal="true"
+	>
+		<div class="mx-4 w-full max-w-[36rem] rounded-2xl bg-white p-6 shadow-xl">
+			<h3 class="text-base font-semibold text-gray-900">สร้างห้องเล่นหลายคน</h3>
+			<p class="mt-1 text-sm text-gray-500">เลือกเวลาต่อตา แล้วระบบจะสร้างรหัสห้อง 5 หลักให้</p>
+
+			<div class="mt-4 flex gap-2">
+				{#each [15, 30, 60] as const as sec}
+					<button
+						type="button"
+						onclick={() => (turnDuration = sec)}
+						class="flex-1 rounded-xl border py-2 text-sm font-medium transition-colors {turnDuration ===
+						sec
+							? 'border-primary-500 bg-primary-500 text-white'
+							: 'border-gray-200 text-gray-600 hover:border-primary-300'}"
+					>
+						{sec}s
+					</button>
+				{/each}
+			</div>
+
+			{#if createRoomError}
+				<p class="mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{createRoomError}</p>
+			{/if}
+
+			<div class="mt-5 flex gap-3">
+				<button
+					onclick={() => (showMultiplayerModal = false)}
+					disabled={creatingRoom}
+					class="flex-1 rounded-xl border border-gray-200 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50"
+				>
+					ยกเลิก
+				</button>
+				<button
+					onclick={handleCreateRoom}
+					disabled={creatingRoom}
+					class="flex-1 rounded-xl bg-primary-500 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-400 disabled:opacity-50"
+				>
+					{creatingRoom ? 'กำลังสร้าง...' : 'สร้างห้อง'}
+				</button>
+			</div>
+		</div>
+	</div>
+{/if}
+
 <!-- Delete confirmation modal -->
 {#if confirmDelete}
 	<div
@@ -465,7 +552,7 @@
 		role="dialog"
 		aria-modal="true"
 	>
-		<div class="mx-4 w-full max-w-200 rounded-2xl bg-white p-6 shadow-xl">
+		<div class="mx-4 w-full max-w-[36rem] rounded-2xl bg-white p-6 shadow-xl">
 			<h3 class="text-base font-semibold text-gray-900">ยืนยันการลบเกม</h3>
 			<p class="mt-2 text-sm text-gray-500">
 				เกม <span class="font-medium text-gray-800">{$gameDetailStore.game?.name}</span>

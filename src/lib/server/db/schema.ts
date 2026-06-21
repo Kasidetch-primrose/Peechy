@@ -3,4 +3,5 @@ export * from './UserModel';
 export * from './GamesModel';
 export * from './ImagesModel';
 export * from './ImageHintsModel';
+export * from './MultiplayerModel';
 export * from './auth.schema';

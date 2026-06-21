@@ -3,8 +3,30 @@
 	import favicon from '$lib/assets/favicon.svg';
 	import AuthService from '$lib/data/services/auth';
 	import { authUserStore } from '$lib/data/stores/authUser';
+	import { connect, joinRoom } from '$lib/data/stores/multiplayer';
 
 	let mobileMenuOpen = $state(false);
+	let joinCode = $state('');
+	let joining = $state(false);
+
+	async function handleJoinRoom() {
+		const code = joinCode.trim();
+		if (code.length !== 5) return;
+		const user = $authUserStore.user;
+		if (!user) {
+			goto('/auth/login');
+			return;
+		}
+		joining = true;
+		connect(String(user.id), user.username);
+		const ok = await joinRoom(code);
+		joining = false;
+		if (ok) {
+			joinCode = '';
+			mobileMenuOpen = false;
+			goto(`/game/multiplayer/lobby/${code}`);
+		}
+	}
 
 	const navLinks = [
 		{ href: '/', label: 'หน้าหลัก' },
@@ -56,6 +78,33 @@
 
 		<!-- Desktop CTA -->
 		<div class="hidden items-center gap-sm md:flex">
+			<!-- Join multiplayer room by code -->
+			<div class="flex items-center overflow-hidden rounded-full border border-primary-300 bg-white">
+				<input
+					type="text"
+					bind:value={joinCode}
+					maxlength="5"
+					inputmode="numeric"
+					placeholder="รหัสห้อง"
+					class="w-24 bg-transparent px-3 py-1.5 text-sm text-gray-700 outline-none placeholder:text-gray-400"
+					onkeydown={(e) => e.key === 'Enter' && handleJoinRoom()}
+				/>
+				<button
+					type="button"
+					onclick={handleJoinRoom}
+					disabled={joining || joinCode.trim().length !== 5}
+					class="flex items-center justify-center bg-primary-500 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-primary-400 disabled:cursor-not-allowed disabled:bg-btn-primary-disabled"
+				>
+					{#if joining}
+						<svg class="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+							<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+							<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+						</svg>
+					{:else}
+						เข้าร่วม
+					{/if}
+				</button>
+			</div>
 			{#if $authUserStore.user}
 				<div class="flex items-center gap-3">
 					<a
@@ -156,6 +205,34 @@
 						</a>
 					</li>
 				{/each}
+				<li>
+					<div class="flex items-center overflow-hidden rounded-full border border-primary-300 bg-white">
+						<input
+							type="text"
+							bind:value={joinCode}
+							maxlength="5"
+							inputmode="numeric"
+							placeholder="รหัสห้อง"
+							class="w-full bg-transparent px-3 py-2 text-sm text-gray-700 outline-none placeholder:text-gray-400"
+							onkeydown={(e) => e.key === 'Enter' && handleJoinRoom()}
+						/>
+						<button
+							type="button"
+							onclick={handleJoinRoom}
+							disabled={joining || joinCode.trim().length !== 5}
+							class="flex items-center justify-center bg-primary-500 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-primary-400 disabled:cursor-not-allowed disabled:bg-btn-primary-disabled"
+						>
+							{#if joining}
+								<svg class="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+									<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+									<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+								</svg>
+							{:else}
+								เข้าร่วม
+							{/if}
+						</button>
+					</div>
+				</li>
 				<li class="border-t border-primary-200/50 pt-md">
 					{#if $authUserStore.user}
 						<div class="flex flex-col gap-2">

@@ -1,0 +1,110 @@
+import 'dotenv/config';
+import { createServer } from 'http';
+import { Server } from 'socket.io';
+import * as rooms from './roomManager.js';
+import * as game from './game.js';
+import type { Player } from './types.js';
+
+const PORT = Number(process.env.PORT ?? 4001);
+const CORS_ORIGIN = process.env.CORS_ORIGIN ?? 'http://localhost:5173';
+
+const httpServer = createServer();
+const io = new Server(httpServer, {
+	cors: { origin: CORS_ORIGIN }
+});
+
+function err(socket: import('socket.io').Socket, code: string | undefined, message: string) {
+	socket.emit('room:error', { code, message });
+}
+
+io.on('connection', (socket) => {
+	const playerId = String(socket.handshake.auth.playerId ?? '');
+	const playerName = String(socket.handshake.auth.playerName ?? 'Player');
+	if (!playerId) {
+		socket.disconnect(true);
+		return;
+	}
+	// Personal room so the server can privately target this player (e.g. their
+	// own guess text) without leaking it to the rest of the room.
+	socket.join(`player:${playerId}`);
+
+	socket.on('room:create', async ({ gameId, turnDurationSec }, callback) => {
+		try {
+			let code = rooms.generateRoomCode();
+			while (await rooms.roomExists(code)) code = rooms.generateRoomCode();
+
+			await rooms.createRoom({ code, hostId: playerId, gameId, turnDurationSec });
+			const player: Player = {
+				id: playerId,
+				name: playerName,
+				score: 0,
+				connected: true,
+				joinedAt: Date.now()
+			};
+			await rooms.addPlayer(code, player);
+
+			socket.join(code);
+			callback?.({ ok: true, code });
+		} catch (e) {
+			callback?.({ ok: false, message: (e as Error).message });
+		}
+	});
+
+	socket.on('room:join', async ({ code }, callback) => {
+		try {
+			const room = await rooms.getRoom(code);
+			if (!room) return callback?.({ ok: false, message: 'ไม่พบห้องนี้' });
+			if (room.status !== 'lobby')
+				return callback?.({ ok: false, message: 'เกมเริ่มไปแล้ว ไม่สามารถเข้าร่วมได้' });
+
+			const existing = await rooms.getPlayer(code, playerId);
+			const player: Player = existing
+				? { ...existing, connected: true }
+				: { id: playerId, name: playerName, score: 0, connected: true, joinedAt: Date.now() };
+			await rooms.addPlayer(code, player);
+
+			socket.join(code);
+			const players = await rooms.getAllPlayers(code);
+			io.to(code).emit('room:playerJoined', { player });
+			callback?.({ ok: true, room, players });
+		} catch (e) {
+			callback?.({ ok: false, message: (e as Error).message });
+		}
+	});
+
+	socket.on('room:leave', async ({ code }) => {
+		await rooms.removePlayer(code, playerId);
+		socket.leave(code);
+		io.to(code).emit('room:playerLeft', { playerId });
+	});
+
+	socket.on('room:start', async ({ code }) => {
+		const room = await rooms.getRoom(code);
+		if (!room) return err(socket, code, 'ไม่พบห้องนี้');
+		if (room.hostId !== playerId) return err(socket, code, 'เฉพาะเจ้าของห้องเท่านั้นที่เริ่มเกมได้');
+		await game.startGame(io, code);
+	});
+
+	socket.on('turn:revealTile', async ({ code, tileIndex }) => {
+		await game.revealTile(io, code, playerId, tileIndex);
+	});
+
+	socket.on('turn:submitGuess', async ({ code, guess }) => {
+		await game.submitGuess(io, code, playerId, guess);
+	});
+
+	socket.on('turn:useHint', async ({ code }) => {
+		await game.useHint(io, code, playerId);
+	});
+
+	socket.on('disconnect', async () => {
+		for (const room of socket.rooms) {
+			if (room === socket.id) continue;
+			await game.handleDisconnect(io, room, playerId);
+		}
+	});
+});
+
+httpServer.listen(PORT, () => {
+	console.log(`[peechy-realtime] listening on :${PORT}`);
+});

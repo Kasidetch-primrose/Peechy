@@ -29,7 +29,7 @@
 </script>
 
 <div class="flex min-h-screen items-center justify-center bg-transparent px-4 py-12">
-	<div class="game-enter w-full max-w-md">
+	<div class="game-enter w-full max-w-[36rem]">
 		<!-- Brand -->
 		<div class="mb-8 text-center">
 			<div
