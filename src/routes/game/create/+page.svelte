@@ -201,23 +201,25 @@
 									max-w-6xl grid) so what the user sees here is exactly what gets stored.
 								-->
 								<div class="flex justify-center">
-								<div
-									bind:this={editorEl}
-									role="img"
-									aria-label="ลากเพื่อปรับตำแหน่งภาพปก"
-									class="relative overflow-hidden rounded-2xl border border-gray-200 shadow-md"
-									style="width: 100%; max-width: 380px; aspect-ratio: 352 / 304; cursor: {dragging ? 'grabbing' : 'grab'}; touch-action: none;"
-									onpointerdown={onEditorPointerDown}
-									onpointermove={onEditorPointerMove}
-									onpointerup={onEditorPointerUp}
-									onpointercancel={onEditorPointerUp}
-								>
-									<!-- Full image (draggable via object-position) -->
-									<img
-										src={$gameCreateStore.thumbnailPreview}
-										alt="thumbnail"
-										draggable="false"
-										style="
+									<div
+										bind:this={editorEl}
+										role="img"
+										aria-label="ลากเพื่อปรับตำแหน่งภาพปก"
+										class="relative overflow-hidden rounded-2xl border border-gray-200 shadow-md"
+										style="width: 100%; max-width: 380px; aspect-ratio: 352 / 304; cursor: {dragging
+											? 'grabbing'
+											: 'grab'}; touch-action: none;"
+										onpointerdown={onEditorPointerDown}
+										onpointermove={onEditorPointerMove}
+										onpointerup={onEditorPointerUp}
+										onpointercancel={onEditorPointerUp}
+									>
+										<!-- Full image (draggable via object-position) -->
+										<img
+											src={$gameCreateStore.thumbnailPreview}
+											alt="thumbnail"
+											draggable="false"
+											style="
 											position: absolute; inset: 0;
 											width: 100%; height: 100%;
 											object-fit: cover;
@@ -226,11 +228,11 @@
 											user-select: none;
 											-webkit-user-drag: none;
 										"
-									/>
+										/>
 
-									<!-- GameCard glass-panel preview (7.2/19 = 37.9% of card height) -->
-									<div
-										style="
+										<!-- GameCard glass-panel preview (7.2/19 = 37.9% of card height) -->
+										<div
+											style="
 											position: absolute; bottom: 0; left: 0; right: 0;
 											height: 37.9%;
 											background: rgba(255,255,255,0.18);
@@ -241,41 +243,81 @@
 											display: flex; flex-direction: column; gap: 0.3rem;
 											pointer-events: none;
 										"
-									>
-										<!-- Placeholder title bar -->
-										<div style="height: 11px; width: 55%; background: rgba(255,255,255,0.55); border-radius: 6px;"></div>
-										<!-- Placeholder description bar -->
-										<div style="height: 8px; width: 80%; background: rgba(255,255,255,0.32); border-radius: 6px;"></div>
-										<!-- Footer row -->
-										<div style="margin-top: auto; display: flex; justify-content: space-between; align-items: center;">
-											<div style="height: 8px; width: 35%; background: rgba(255,255,255,0.28); border-radius: 6px;"></div>
-											<div style="height: 26px; width: 72px; background: #FF9B73; border-radius: 9999px; opacity: 0.9;"></div>
-										</div>
-									</div>
-
-									<!-- Upload spinner -->
-									{#if $gameCreateStore.thumbnailStatus === 'uploading'}
-										<div class="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/50">
-											<svg class="h-6 w-6 animate-spin text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-												<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-												<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-											</svg>
-											<span class="text-xs text-white">กำลังอัพโหลด...</span>
-										</div>
-									{:else}
-										<!-- Drag hint pill -->
-										<div
-											class="absolute top-2.5 left-1/2 -translate-x-1/2 flex items-center gap-1.5 rounded-full px-3 py-1 text-xs text-white"
-											style="background: rgba(0,0,0,0.42); backdrop-filter: blur(6px); white-space: nowrap; pointer-events: none;"
 										>
-											<svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-												<path d="M5 9l-3 3 3 3"/><path d="M9 5l3-3 3 3"/><path d="M15 19l3 3 3-3"/><path d="M19 9l3 3-3 3"/><path d="M2 12h20"/><path d="M12 2v20"/>
-											</svg>
-											ลากเพื่อปรับตำแหน่ง
+											<!-- Placeholder title bar -->
+											<div
+												style="height: 11px; width: 55%; background: rgba(255,255,255,0.55); border-radius: 6px;"
+											></div>
+											<!-- Placeholder description bar -->
+											<div
+												style="height: 8px; width: 80%; background: rgba(255,255,255,0.32); border-radius: 6px;"
+											></div>
+											<!-- Footer row -->
+											<div
+												style="margin-top: auto; display: flex; justify-content: space-between; align-items: center;"
+											>
+												<div
+													style="height: 8px; width: 35%; background: rgba(255,255,255,0.28); border-radius: 6px;"
+												></div>
+												<div
+													style="height: 26px; width: 72px; background: #FF9B73; border-radius: 9999px; opacity: 0.9;"
+												></div>
+											</div>
 										</div>
 
-										<!-- Reset position button -->
-										{#if $gameCreateStore.thumbnailPosition.x !== 50 || $gameCreateStore.thumbnailPosition.y !== 50}
+										<!-- Upload spinner -->
+										{#if $gameCreateStore.thumbnailStatus === 'uploading'}
+											<div
+												class="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/50"
+											>
+												<svg
+													class="h-6 w-6 animate-spin text-white"
+													xmlns="http://www.w3.org/2000/svg"
+													fill="none"
+													viewBox="0 0 24 24"
+												>
+													<circle
+														class="opacity-25"
+														cx="12"
+														cy="12"
+														r="10"
+														stroke="currentColor"
+														stroke-width="4"
+													></circle>
+													<path
+														class="opacity-75"
+														fill="currentColor"
+														d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+													></path>
+												</svg>
+												<span class="text-xs text-white">กำลังอัพโหลด...</span>
+											</div>
+										{:else}
+											<!-- Drag hint pill -->
+											<div
+												class="absolute top-2.5 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full px-3 py-1 text-xs text-white"
+												style="background: rgba(0,0,0,0.42); backdrop-filter: blur(6px); white-space: nowrap; pointer-events: none;"
+											>
+												<svg
+													xmlns="http://www.w3.org/2000/svg"
+													width="12"
+													height="12"
+													viewBox="0 0 24 24"
+													fill="none"
+													stroke="currentColor"
+													stroke-width="2.5"
+													stroke-linecap="round"
+													stroke-linejoin="round"
+												>
+													<path d="M5 9l-3 3 3 3" /><path d="M9 5l3-3 3 3" /><path
+														d="M15 19l3 3 3-3"
+													/><path d="M19 9l3 3-3 3" /><path d="M2 12h20" /><path d="M12 2v20" />
+												</svg>
+												ลากเพื่อปรับตำแหน่ง
+											</div>
+
+											<!-- Reset position button -->
+											<!-- {#if $gameCreateStore.thumbnailPosition.x !== 50 || $gameCreateStore.thumbnailPosition.y !== 50}
 											<button
 												type="button"
 												onclick={(e) => { e.stopPropagation(); updateThumbnailPosition(50, 50); }}
@@ -284,17 +326,24 @@
 											>
 												รีเซ็ต
 											</button>
+										{/if} -->
 										{/if}
-									{/if}
+									</div>
 								</div>
-
-								</div> <!-- end justify-center wrapper -->
+								<!-- end justify-center wrapper -->
 
 								<!-- Controls row -->
-								<div class="flex items-center gap-2 flex-wrap">
-									<label class="cursor-pointer rounded-lg border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-600 transition-colors hover:border-primary-300 hover:bg-primary-50 hover:text-primary-700">
+								<div class="flex flex-wrap items-center gap-2">
+									<label
+										class="hover:text-primary-700 cursor-pointer rounded-lg border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-600 transition-colors hover:border-primary-300 hover:bg-primary-50"
+									>
 										เปลี่ยนรูป
-										<input type="file" accept="image/png,image/jpeg,image/webp" onchange={handleThumbnailPick} class="sr-only" />
+										<input
+											type="file"
+											accept="image/png,image/jpeg,image/webp"
+											onchange={handleThumbnailPick}
+											class="sr-only"
+										/>
 									</label>
 									<button
 										type="button"
@@ -303,24 +352,43 @@
 									>
 										ลบรูป
 									</button>
-									<span class="ml-auto text-xs text-gray-400">ตำแหน่งจะถูกบันทึกเมื่อกด "บันทึก"</span>
+									<span class="ml-auto text-xs text-gray-400"
+										>ตำแหน่งจะถูกบันทึกเมื่อกด "บันทึก"</span
+									>
 								</div>
 
 								{#if $gameCreateStore.thumbnailStatus === 'error'}
 									<p class="text-xs text-red-500">{$gameCreateStore.thumbnailError}</p>
 								{/if}
-
 							{:else}
 								<!-- ── Upload picker ──────────────────────────────────── -->
-								<label class="flex h-32 w-full cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-gray-200 bg-gray-50 transition-colors hover:border-primary-300 hover:bg-primary-50/60">
-									<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="text-gray-300">
+								<label
+									class="flex h-32 w-full cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-gray-200 bg-gray-50 transition-colors hover:border-primary-300 hover:bg-primary-50/60"
+								>
+									<svg
+										xmlns="http://www.w3.org/2000/svg"
+										width="28"
+										height="28"
+										viewBox="0 0 24 24"
+										fill="none"
+										stroke="currentColor"
+										stroke-width="1.5"
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										class="text-gray-300"
+									>
 										<rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
 										<circle cx="9" cy="9" r="2" />
 										<path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
 									</svg>
 									<span class="text-sm font-medium text-gray-400">คลิกเพื่อเลือกภาพปก</span>
 									<span class="text-xs text-gray-300">PNG · JPG · WebP · แนะนำสัดส่วน 16:9</span>
-									<input type="file" accept="image/png,image/jpeg,image/webp" onchange={handleThumbnailPick} class="sr-only" />
+									<input
+										type="file"
+										accept="image/png,image/jpeg,image/webp"
+										onchange={handleThumbnailPick}
+										class="sr-only"
+									/>
 								</label>
 							{/if}
 						</div>
@@ -435,7 +503,7 @@
 					{#if $gameCreateStore.slots.length === 0}
 						<div
 							class="flex flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed py-14 text-center transition-colors {isDragging
-								? 'bg-primary-50 border-primary-400'
+								? 'border-primary-400 bg-primary-50'
 								: 'border-gray-200 bg-white'}"
 						>
 							<svg
@@ -706,7 +774,7 @@
 											<button
 												type="button"
 												onclick={() => addHint(slot._id)}
-												class="bg-primary-50 flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-primary-600 transition-colors hover:bg-primary-100"
+												class="flex items-center gap-1 rounded-md bg-primary-50 px-2 py-1 text-xs font-medium text-primary-600 transition-colors hover:bg-primary-100"
 											>
 												<svg
 													xmlns="http://www.w3.org/2000/svg"
@@ -896,7 +964,7 @@
 					<!-- Drop target shown at the bottom when slots exist and user is dragging -->
 					{#if isDragging && $gameCreateStore.slots.length > 0}
 						<div
-							class="bg-primary-50 flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-primary-400 py-6 text-sm font-medium text-primary-500"
+							class="flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-primary-400 bg-primary-50 py-6 text-sm font-medium text-primary-500"
 						>
 							<svg
 								xmlns="http://www.w3.org/2000/svg"
