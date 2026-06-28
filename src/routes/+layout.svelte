@@ -4,6 +4,7 @@
 	import './layout.css';
 	import favicon from '$lib/assets/favicon.svg';
 	import Navbar from '$lib/components/Navbar.svelte';
+	import GradientBackground from '$lib/components/ui/gradient-background.svelte';
 
 	let { children } = $props();
 </script>
@@ -16,10 +17,14 @@
 	</div>
 {/if}
 
-<Navbar />
-{#key `${page.url.pathname}${page.url.search}`}
-	{@render children()}
-{/key}
+<GradientBackground class="min-h-screen">
+	<div class="flex w-full min-h-screen flex-col">
+		<Navbar />
+		{#key `${page.url.pathname}${page.url.search}`}
+			{@render children()}
+		{/key}
+	</div>
+</GradientBackground>
 
 <style>
 	@keyframes loading-bar {
