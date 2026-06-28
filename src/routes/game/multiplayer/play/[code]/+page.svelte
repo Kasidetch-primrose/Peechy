@@ -21,6 +21,25 @@
 	let breakLeft = $state<number | null>(null);
 	let breakTimerHandle: ReturnType<typeof setInterval> | null = null;
 
+	let hintOpen = $state(false);
+	let hintContainer: HTMLDivElement | undefined;
+
+	$effect(() => {
+		if (!hintOpen) return;
+		const handle = (e: PointerEvent) => {
+			if (!hintContainer?.contains(e.target as Node)) hintOpen = false;
+		};
+		document.addEventListener('pointerdown', handle, true);
+		return () => document.removeEventListener('pointerdown', handle, true);
+	});
+
+	function handleHintToggle() {
+		hintOpen = !hintOpen;
+		if (hintOpen && isMyTurn && !$multiplayerStore.hintRequested) {
+			useHint();
+		}
+	}
+
 	// Track container size and natural image dimensions to align the tile
 	// grid to the actually-rendered (object-contain) image rect, same as singleplayer.
 	let containerW = $state(0);
@@ -159,6 +178,56 @@
 				ออกจากเกม
 			</button>
 
+			<!-- ── Hint popup (top center) ─────────────────────────────────────── -->
+			<div class="relative" bind:this={hintContainer}>
+				<button
+					type="button"
+					onclick={handleHintToggle}
+					aria-expanded={hintOpen}
+					aria-haspopup="true"
+					class="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors
+						{hintOpen ? 'bg-warning/10 text-warning' : 'text-gray-600 hover:bg-primary-100/60 hover:text-primary-600'}"
+				>
+					<svg
+						xmlns="http://www.w3.org/2000/svg"
+						width="14"
+						height="14"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+					>
+						<circle cx="12" cy="12" r="10" />
+						<path d="M12 16v-4" />
+						<path d="M12 8h.01" />
+					</svg>
+					คำใบ้
+				</button>
+
+				{#if hintOpen}
+					<div
+						class="absolute top-full left-1/2 z-50 mt-2 w-72 -translate-x-1/2 overflow-hidden rounded-2xl border border-primary-100/60 bg-white/95 shadow-xl backdrop-blur-sm"
+					>
+						<div class="border-b border-gray-100 px-4 py-2.5">
+							<span class="text-xs font-semibold tracking-wide text-gray-500 uppercase">คำใบ้</span>
+						</div>
+						<div class="px-4 py-4">
+							{#if !isMyTurn && !$multiplayerStore.hintRequested}
+								<p class="text-center text-sm text-gray-400">รอตาคุณเพื่อเปิดคำใบ้</p>
+							{:else if !$multiplayerStore.hintRequested}
+								<p class="text-center text-sm text-gray-400">กำลังขอคำใบ้...</p>
+							{:else if $multiplayerStore.hint}
+								<p class="text-sm leading-relaxed text-gray-700">💡 {$multiplayerStore.hint}</p>
+							{:else}
+								<p class="text-center text-sm text-gray-400">ไม่มีคำใบ้สำหรับรูปนี้</p>
+							{/if}
+						</div>
+					</div>
+				{/if}
+			</div>
+
 			<div class="flex items-center gap-2 overflow-x-auto">
 				{#each sortedPlayers as player (player.id)}
 					<span
@@ -283,12 +352,7 @@
 								? 'bg-warning/90 text-black'
 								: 'bg-error/90 text-white'}"
 					>
-						{player?.name}: {bubble.guessText ??
-							(bubble.result === 'close'
-								? '🔥 เกือบ!'
-								: bubble.result === 'correct'
-									? 'ถูกต้อง!'
-									: 'ผิด')}
+						{player?.name}: {bubble.guessText}
 					</span>
 				{/each}
 			</div>
@@ -317,21 +381,7 @@
 						ส่ง
 					</button>
 				</div>
-				{#if $multiplayerStore.hint}
-					<p class="text-center text-sm font-medium text-warning">💡 {$multiplayerStore.hint}</p>
-				{/if}
 			</div>
-
-			<!-- ── Hint button ───────────────────────────────────────────────── -->
-			{#if isMyTurn}
-				<button
-					type="button"
-					onclick={() => useHint()}
-					class="w-full rounded-xl border border-primary-400/40 py-2.5 text-sm font-medium text-primary-600 transition-all hover:border-primary-400 hover:bg-primary-100/60"
-				>
-					💡 ใช้คำใบ้
-				</button>
-			{/if}
 		</div>
 	</div>
 {:else}

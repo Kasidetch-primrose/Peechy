@@ -140,10 +140,7 @@ export async function submitGuess(
 		return;
 	}
 
-	// Don't leak the actual guess text to other players — it can hint at the
-	// answer (e.g. a close typo). They only see the generic outcome.
-	io.to(code).except(`player:${playerId}`).emit('guess:result', { playerId, result: outcome });
-	io.to(`player:${playerId}`).emit('guess:result', { playerId, guessText: guess, result: outcome });
+	io.to(code).emit('guess:result', { playerId, guessText: guess, result: outcome });
 
 	await maybeEndTurn(io, code, updatedTurn);
 }

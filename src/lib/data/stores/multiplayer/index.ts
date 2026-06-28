@@ -25,6 +25,7 @@ interface MultiplayerState {
 
 	bubbles: IGuessBubble[]; // recent guesses, auto-expire from UI after a few seconds
 	hint: string | null;
+	hintRequested: boolean; // true once the current player has asked for this turn's hint
 	revealedAnswer: string | null; // shown briefly when an image round ends
 
 	// Between-round break state: 'answer' shows the full solved image,
@@ -52,6 +53,7 @@ const initial: MultiplayerState = {
 	turnStartedAt: null,
 	bubbles: [],
 	hint: null,
+	hintRequested: false,
 	revealedAnswer: null,
 	roundPhase: 'none',
 	roundBreakSec: 0,
@@ -188,6 +190,7 @@ function _bindEvents() {
 				turnDurationSec,
 				turnStartedAt: startedAt,
 				hint: null,
+				hintRequested: false,
 				revealedAnswer: null,
 				roundPhase: 'none',
 				roundBreakStartedAt: null,
@@ -215,12 +218,7 @@ function _bindEvents() {
 			guessText: string;
 			result: IGuessBubble['result'];
 		}) => {
-			const { selfId } = get(multiplayerStore);
-			const bubble: IGuessBubble = {
-				playerId,
-				result,
-				guessText: playerId === selfId ? guessText : undefined
-			};
+			const bubble: IGuessBubble = { playerId, result, guessText };
 			multiplayerStore.update((s) => ({ ...s, bubbles: [...s.bubbles, bubble] }));
 			// Fade the bubble out of the UI after 3s.
 			setTimeout(() => {
@@ -230,7 +228,7 @@ function _bindEvents() {
 	);
 
 	socket.on('turn:hintUsed', ({ hint }: { playerId: string; hint: string | null }) => {
-		multiplayerStore.update((s) => ({ ...s, hint }));
+		multiplayerStore.update((s) => ({ ...s, hint, hintRequested: true }));
 	});
 
 	socket.on(
