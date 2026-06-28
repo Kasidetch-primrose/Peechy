@@ -79,7 +79,12 @@
 		<!-- Full-bleed cover -->
 		<div class="cover">
 			{#if game.thumbnailUrl}
-				<img src={game.thumbnailUrl} alt={game.name} class="cover-img" />
+				<img
+				src={game.thumbnailUrl}
+				alt={game.name}
+				class="cover-img"
+				style="object-position: {game.thumbnailPositionX ?? 50}% {game.thumbnailPositionY ?? 50}%"
+			/>
 			{:else}
 				<div class="cover-fallback" style="background: {coverGradient};">
 					<span class="cover-emoji">{emoji}</span>

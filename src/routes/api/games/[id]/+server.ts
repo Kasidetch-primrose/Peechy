@@ -42,7 +42,7 @@ export const PUT: RequestHandler = async ({ params, request }) => {
 
 	try {
 		const body = await request.json();
-		const { name, description, difficulty, isPublic, thumbnailUrl } = body;
+		const { name, description, difficulty, isPublic, thumbnailUrl, thumbnailPositionX, thumbnailPositionY } = body;
 
 		if (name !== undefined) {
 			if (typeof name !== 'string' || !name.trim()) {
@@ -62,7 +62,11 @@ export const PUT: RequestHandler = async ({ params, request }) => {
 			return json({ status: 'error', error: 'thumbnailUrl must be a valid http/https URL' }, { status: 400 });
 		}
 
-		const doc = await gamesLogic.updateOne(id, { name, description, difficulty, isPublic, thumbnailUrl });
+		const doc = await gamesLogic.updateOne(id, {
+			name, description, difficulty, isPublic, thumbnailUrl,
+			thumbnailPositionX: typeof thumbnailPositionX === 'number' ? thumbnailPositionX : undefined,
+			thumbnailPositionY: typeof thumbnailPositionY === 'number' ? thumbnailPositionY : undefined
+		});
 		if (!doc) {
 			return json({ status: 'error', error: 'game not found' }, { status: 404 });
 		}

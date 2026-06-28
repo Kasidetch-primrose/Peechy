@@ -17,7 +17,7 @@ function serverErr(e: unknown) {
 // POST /api/games — CreateOne
 export const POST: RequestHandler = async ({ request }) => {
 	const body = await request.json();
-	const { name, description, creatorId, difficulty, isPublic, thumbnailUrl } = body;
+	const { name, description, creatorId, difficulty, isPublic, thumbnailUrl, thumbnailPositionX, thumbnailPositionY } = body;
 
 	if (!name || typeof name !== 'string' || !name.trim()) {
 		return json({ status: 'error', error: 'name is required' }, { status: 400 });
@@ -44,7 +44,9 @@ export const POST: RequestHandler = async ({ request }) => {
 			creatorToken,
 			difficulty,
 			isPublic,
-			thumbnailUrl
+			thumbnailUrl,
+			thumbnailPositionX: typeof thumbnailPositionX === 'number' ? thumbnailPositionX : undefined,
+			thumbnailPositionY: typeof thumbnailPositionY === 'number' ? thumbnailPositionY : undefined
 		});
 		return json({ status: 'success', doc: { ...doc, creatorToken } }, { status: 201 });
 	} catch (e) {

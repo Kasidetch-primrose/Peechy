@@ -1,4 +1,4 @@
-import { pgTable, integer, text, varchar, boolean, jsonb } from 'drizzle-orm/pg-core';
+import { pgTable, integer, text, varchar, boolean, jsonb, real } from 'drizzle-orm/pg-core';
 import { baseColumns } from './base';
 import { users } from './UserModel';
 
@@ -12,7 +12,9 @@ export const games = pgTable('games', {
 	isPublic: boolean('is_public').default(true),
 	likes: integer('likes').default(0),
 	playCount: integer('play_count').default(0),
-	thumbnailUrl: text('thumbnail_url')
+	thumbnailUrl: text('thumbnail_url'),
+	thumbnailPositionX: real('thumbnail_position_x').default(50),
+	thumbnailPositionY: real('thumbnail_position_y').default(50)
 });
 
 export const gameSessions = pgTable('game_sessions', {

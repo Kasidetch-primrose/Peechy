@@ -16,6 +16,8 @@ export interface IGame {
 	isLiked?: boolean;
 	playCount: number | null;
 	thumbnailUrl: string | null;
+	thumbnailPositionX: number | null;
+	thumbnailPositionY: number | null;
 }
 
 export interface IGameImageHint {
@@ -127,6 +129,8 @@ export interface ICreateGameRequest {
 	difficulty?: string;
 	isPublic?: boolean;
 	thumbnailUrl?: string;
+	thumbnailPositionX?: number;
+	thumbnailPositionY?: number;
 }
 
 export interface IUpdateGameRequest {
@@ -135,6 +139,8 @@ export interface IUpdateGameRequest {
 	difficulty?: string;
 	isPublic?: boolean;
 	thumbnailUrl?: string;
+	thumbnailPositionX?: number;
+	thumbnailPositionY?: number;
 }
 
 export interface ICreateImageRequest {

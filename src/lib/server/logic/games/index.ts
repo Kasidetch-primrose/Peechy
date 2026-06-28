@@ -15,6 +15,8 @@ export type CreateGameData = {
 	difficulty?: string;
 	isPublic?: boolean;
 	thumbnailUrl?: string;
+	thumbnailPositionX?: number;
+	thumbnailPositionY?: number;
 };
 
 export type UpdateGameData = Partial<Omit<CreateGameData, 'creatorId'>>;
@@ -49,7 +51,9 @@ const publicGameFields = {
 	isPublic: games.isPublic,
 	likes: games.likes,
 	playCount: games.playCount,
-	thumbnailUrl: games.thumbnailUrl
+	thumbnailUrl: games.thumbnailUrl,
+	thumbnailPositionX: games.thumbnailPositionX,
+	thumbnailPositionY: games.thumbnailPositionY
 };
 
 export async function getOne(id: number) {

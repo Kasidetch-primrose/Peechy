@@ -39,11 +39,12 @@ interface GameCreateState {
 	loadingEdit: boolean;
 	submitting: boolean;
 	submitError: string;
-	thumbnailPreview: string;
+	thumbnailPreview: string;    // blob: URL shown in the drag editor
 	thumbnailUrl: string;
 	thumbnailKey: string;
 	thumbnailStatus: UploadStatus;
 	thumbnailError: string;
+	thumbnailPosition: { x: number; y: number };
 }
 
 // ── Store ──────────────────────────────────────────────────────────────────────
@@ -61,7 +62,8 @@ const initial: GameCreateState = {
 	thumbnailUrl: '',
 	thumbnailKey: '',
 	thumbnailStatus: 'idle',
-	thumbnailError: ''
+	thumbnailError: '',
+	thumbnailPosition: { x: 50, y: 50 }
 };
 
 export const gameCreateStore = writable<GameCreateState>({
@@ -94,7 +96,11 @@ export async function loadEditData(id: number) {
 				thumbnailUrl: g.thumbnailUrl ?? '',
 				thumbnailKey: '',
 				thumbnailStatus: g.thumbnailUrl ? 'done' : 'idle',
-				thumbnailError: ''
+				thumbnailError: '',
+				thumbnailPosition: {
+					x: g.thumbnailPositionX ?? 50,
+					y: g.thumbnailPositionY ?? 50
+				}
 			}));
 		}
 		if (imagesRes.status === 'success') {
@@ -309,8 +315,13 @@ export function removeThumbnail() {
 		thumbnailUrl: '',
 		thumbnailKey: '',
 		thumbnailStatus: 'idle',
-		thumbnailError: ''
+		thumbnailError: '',
+		thumbnailPosition: { x: 50, y: 50 }
 	}));
+}
+
+export function updateThumbnailPosition(x: number, y: number) {
+	gameCreateStore.update((s) => ({ ...s, thumbnailPosition: { x, y } }));
 }
 
 export function moveUp(idx: number) {
@@ -414,7 +425,7 @@ export async function handleSubmit(e: SubmitEvent, editId: number | null) {
 	e.preventDefault();
 	gameCreateStore.update((s) => ({ ...s, submitError: '' }));
 
-	const { gameName, description, difficulty, isPublic, slots, pendingDeletes, thumbnailUrl } =
+	const { gameName, description, difficulty, isPublic, slots, pendingDeletes, thumbnailUrl, thumbnailPosition } =
 		get(gameCreateStore);
 	const user = get(authUserStore).user;
 
@@ -450,6 +461,8 @@ export async function handleSubmit(e: SubmitEvent, editId: number | null) {
 	gameCreateStore.update((s) => ({ ...s, submitting: true }));
 	try {
 		let gameId: number;
+		const posX = thumbnailUrl ? thumbnailPosition.x : undefined;
+		const posY = thumbnailUrl ? thumbnailPosition.y : undefined;
 
 		if (editId) {
 			const res = await GameService.update(editId, {
@@ -457,7 +470,9 @@ export async function handleSubmit(e: SubmitEvent, editId: number | null) {
 				description: description.trim() || undefined,
 				difficulty: difficulty || undefined,
 				isPublic,
-				thumbnailUrl: thumbnailUrl || undefined
+				thumbnailUrl: thumbnailUrl || undefined,
+				thumbnailPositionX: posX,
+				thumbnailPositionY: posY
 			});
 			if (res.status !== 'success') throw new Error(res.error ?? 'ไม่สามารถบันทึกเกมได้');
 			gameId = editId;
@@ -468,7 +483,9 @@ export async function handleSubmit(e: SubmitEvent, editId: number | null) {
 				creatorId: user?.id ?? null,
 				difficulty: difficulty || undefined,
 				isPublic,
-				thumbnailUrl: thumbnailUrl || undefined
+				thumbnailUrl: thumbnailUrl || undefined,
+				thumbnailPositionX: posX,
+				thumbnailPositionY: posY
 			});
 			if (res.status !== 'success') throw new Error(res.error ?? 'ไม่สามารถสร้างเกมได้');
 			gameId = res.doc.id;
