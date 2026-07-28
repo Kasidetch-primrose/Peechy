@@ -332,7 +332,7 @@
 						createRoomError = '';
 					}}
 					disabled={images.length === 0}
-					class="rounded-xl border border-primary-400/50 px-8 py-3 text-base font-semibold text-primary-600 transition-colors hover:bg-primary-100 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
+					class="rounded-xl bg-secondary-lavender px-8 py-3 text-base font-semibold text-white shadow-sm transition-colors hover:brightness-95 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
 				>
 					👥 เล่นหลายคน
 				</button>
