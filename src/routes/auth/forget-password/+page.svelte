@@ -1,4 +1,7 @@
 <script lang="ts">
+	import AnimatedCardShell from '$lib/components/ui/animated-card-shell.svelte';
+	import FloatingInput from '$lib/components/ui/floating-input.svelte';
+
 	let email = $state('');
 	let loading = $state(false);
 	let error = $state('');
@@ -42,9 +45,7 @@
 		</div>
 
 		<!-- Card -->
-		<div
-			class="rounded-2xl border border-primary-100/60 bg-white/80 p-8 shadow-md backdrop-blur-sm"
-		>
+		<AnimatedCardShell>
 			{#if sent}
 				<!-- Success state -->
 				<div class="flex flex-col items-center gap-4 py-4 text-center">
@@ -76,15 +77,13 @@
 				<!-- Form state -->
 				<form onsubmit={handleSubmit} class="flex flex-col gap-5">
 					<div class="flex flex-col gap-1.5">
-						<label for="email" class="text-sm font-medium text-gray-700">อีเมล</label>
-						<input
+						<FloatingInput
 							id="email"
+							label="อีเมล"
 							type="email"
 							bind:value={email}
-							placeholder="you@example.com"
 							required
 							autocomplete="email"
-							class="rounded-lg border border-gray-200 px-3 py-2.5 text-sm text-gray-900 outline-none placeholder:text-gray-400 focus:border-primary-400 focus:ring-2 focus:ring-primary-100"
 						/>
 						<p class="text-xs text-gray-400">เราจะส่งลิงก์รีเซ็ตรหัสผ่านไปที่อีเมลนี้</p>
 					</div>
@@ -98,7 +97,7 @@
 					<button
 						type="submit"
 						disabled={loading}
-						class="w-full rounded-lg bg-primary-500 py-2.5 text-sm font-semibold text-white transition hover:bg-primary-400 active:bg-primary-600 disabled:opacity-60"
+						class="w-full rounded-full bg-primary-500 py-2.5 text-sm font-semibold text-white transition hover:bg-primary-400 active:bg-primary-600 disabled:opacity-60"
 					>
 						{#if loading}
 							<span class="flex items-center justify-center gap-2">
@@ -130,7 +129,7 @@
 					</button>
 				</form>
 			{/if}
-		</div>
+		</AnimatedCardShell>
 
 		<!-- Back to login -->
 		<p class="mt-5 text-center text-sm text-gray-500">
