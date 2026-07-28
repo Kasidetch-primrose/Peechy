@@ -93,7 +93,7 @@
 	<div
 		class="flex min-h-screen items-center justify-center bg-linear-to-br from-primary-100/40 via-white to-primary-100/20"
 	>
-		<div class="game-enter flex flex-col items-center gap-3 text-primary-500">
+		<div class="animate-game-enter flex flex-col items-center gap-3 text-primary-500">
 			<svg
 				class="h-8 w-8 animate-spin"
 				xmlns="http://www.w3.org/2000/svg"
@@ -130,7 +130,7 @@
 	<div
 		class="flex min-h-screen flex-col items-center justify-center gap-6 bg-linear-to-br from-primary-100/40 via-white to-primary-100/20 px-4"
 	>
-		<div class="game-enter flex flex-col items-center gap-2">
+		<div class="animate-game-enter flex flex-col items-center gap-2">
 			<span class="text-6xl">🎉</span>
 			<h1 class="text-3xl font-bold">จบเกมแล้ว!</h1>
 			<p class="text-gray-400">{$gamePlayStore.game?.name}</p>
@@ -169,7 +169,7 @@
 	{@const shouldShowImage = revealed.length > 0 || status !== 'playing'}
 
 	<div
-		class="game-enter flex h-screen flex-col bg-linear-to-br from-primary-100/40 via-white to-primary-100/20"
+		class="animate-game-enter flex h-screen flex-col bg-linear-to-br from-primary-100/40 via-white to-primary-100/20"
 	>
 		<!-- ── Top bar ──────────────────────────────────────────────────────── -->
 		<div
@@ -415,27 +415,3 @@
 		</div>
 	</div>
 {/if}
-
-<style>
-	@keyframes shake {
-		0%,
-		100% {
-			transform: translateX(0);
-		}
-		20% {
-			transform: translateX(-6px);
-		}
-		40% {
-			transform: translateX(6px);
-		}
-		60% {
-			transform: translateX(-4px);
-		}
-		80% {
-			transform: translateX(4px);
-		}
-	}
-	.animate-shake {
-		animation: shake 0.5s ease-in-out;
-	}
-</style>

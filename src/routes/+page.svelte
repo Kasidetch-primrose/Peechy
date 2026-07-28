@@ -40,7 +40,7 @@
 	});
 </script>
 
-<main class="game-enter min-h-screen bg-transparent">
+<main class="animate-game-enter min-h-screen bg-transparent">
 	<!-- ! ! HomeHeader -->
 	<!-- ! ! <HomeHeader /> -->
 

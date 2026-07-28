@@ -13,7 +13,7 @@
 
 {#if $navigating}
 	<div class="fixed inset-x-0 top-0 z-[100] h-1 overflow-hidden bg-primary-100">
-		<div class="h-full w-1/3 animate-[loading-bar_1s_ease-in-out_infinite] bg-primary-500"></div>
+		<div class="h-full w-1/3 animate-loading-bar bg-primary-500"></div>
 	</div>
 {/if}
 
@@ -25,17 +25,3 @@
 		{/key}
 	</div>
 </GradientBackground>
-
-<style>
-	@keyframes loading-bar {
-		0% {
-			transform: translateX(-100%);
-		}
-		50% {
-			transform: translateX(150%);
-		}
-		100% {
-			transform: translateX(150%);
-		}
-	}
-</style>
