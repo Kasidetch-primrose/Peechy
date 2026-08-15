@@ -61,10 +61,25 @@
 		loadGame(id);
 		return () => resetGameDetailStore();
 	});
+
+	// Fill exactly the viewport space below the sticky navbar, no page scroll.
+	let availableHeight = $state('100vh');
+
+	function updateAvailableHeight() {
+		const header = document.querySelector('header');
+		const top = header ? header.getBoundingClientRect().bottom : 0;
+		availableHeight = `calc(100vh - ${top}px)`;
+	}
+
+	$effect(() => {
+		updateAvailableHeight();
+		window.addEventListener('resize', updateAvailableHeight);
+		return () => window.removeEventListener('resize', updateAvailableHeight);
+	});
 </script>
 
 {#if $gameDetailStore.loading}
-	<div class="flex min-h-screen items-center justify-center bg-transparent">
+	<div style="height: {availableHeight}" class="flex items-center justify-center bg-transparent">
 		<div class="flex flex-col items-center gap-3 text-primary-500">
 			<svg
 				class="h-8 w-8 animate-spin"
@@ -84,7 +99,10 @@
 		</div>
 	</div>
 {:else if $gameDetailStore.error}
-	<div class="flex min-h-screen flex-col items-center justify-center gap-4 bg-transparent">
+	<div
+		style="height: {availableHeight}"
+		class="flex flex-col items-center justify-center gap-4 bg-transparent"
+	>
 		<span class="text-5xl">😕</span>
 		<p class="text-base font-medium text-gray-700">{$gameDetailStore.error}</p>
 		<button
@@ -97,12 +115,12 @@
 {:else if $gameDetailStore.game}
 	{@const game = $gameDetailStore.game}
 	{@const images = $gameDetailStore.images}
-	<div class="min-h-screen bg-transparent">
+	<div style="height: {availableHeight}" class="overflow-hidden bg-transparent">
 		<!-- ! ── Hero ──────────────────────────────────────────────────────────── -->
 		<!-- <div class="border-b border-primary-100/40 bg-white/70 shadow-sm backdrop-blur-sm"> -->
-		<div class="mx-auto max-w-4xl px-4 py-6">
+		<div class="mx-auto flex h-full max-w-4xl flex-col px-4 py-4">
 			<!-- ! Back + actions row -->
-			<div class="mb-4 flex items-center justify-between">
+			<div class="mb-3 flex shrink-0 items-center justify-between">
 				<button
 					onclick={() => goto('/')}
 					class="flex items-center gap-1.5 text-sm text-gray-600 transition-colors hover:text-primary-500"
@@ -178,13 +196,13 @@
 
 			<!-- ! Thumbnail -->
 			{#if game.thumbnailUrl}
-				<div class="mb-5 overflow-hidden rounded-2xl bg-gray-100 shadow-sm">
-					<img src={game.thumbnailUrl} alt={game.name} class="aspect-video w-full object-cover" />
+				<div class="mb-3 max-h-1/2 flex-1 overflow-hidden rounded-2xl bg-gray-100 shadow-sm">
+					<img src={game.thumbnailUrl} alt={game.name} class="h-full w-full object-contain" />
 				</div>
 			{/if}
 
 			<!-- ! Title + badges -->
-			<div class="flex flex-col gap-3">
+			<div class="flex shrink-0 flex-col gap-2">
 				<div class="flex flex-wrap items-start gap-2">
 					<h1 class="text-2xl font-bold text-gray-900 sm:text-3xl">{game.name}</h1>
 				</div>
@@ -248,14 +266,14 @@
 				</div>
 
 				{#if game.description}
-					<p class="text-sm leading-relaxed wrap-break-word text-gray-600">
+					<p class="line-clamp-2 text-sm leading-relaxed wrap-break-word text-gray-600">
 						{game.description}
 					</p>
 				{/if}
 			</div>
 
 			<!-- ! Stats row -->
-			<div class="mt-4 flex flex-wrap gap-5 border-t border-gray-100 pt-4">
+			<div class="mt-3 flex shrink-0 flex-wrap gap-5 border-t border-gray-100 pt-3">
 				<div class="flex items-center gap-1.5 text-sm text-gray-500">
 					<svg
 						xmlns="http://www.w3.org/2000/svg"
@@ -318,7 +336,7 @@
 			</div>
 
 			<!-- ! Play buttons -->
-			<div class="mt-5 flex flex-wrap gap-3">
+			<div class="mt-3 flex shrink-0 flex-wrap gap-3">
 				<button
 					onclick={() => goto(`/game/play/${game!.id}`)}
 					disabled={images.length === 0}

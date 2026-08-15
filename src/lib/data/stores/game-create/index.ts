@@ -470,7 +470,7 @@ export async function handleSubmit(e: SubmitEvent, editId: number | null) {
 				description: description.trim() || undefined,
 				difficulty: difficulty || undefined,
 				isPublic,
-				thumbnailUrl: thumbnailUrl || undefined,
+				thumbnailUrl: thumbnailUrl || null,
 				thumbnailPositionX: posX,
 				thumbnailPositionY: posY
 			});

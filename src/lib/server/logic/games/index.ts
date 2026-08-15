@@ -19,7 +19,9 @@ export type CreateGameData = {
 	thumbnailPositionY?: number;
 };
 
-export type UpdateGameData = Partial<Omit<CreateGameData, 'creatorId'>>;
+export type UpdateGameData = Partial<Omit<CreateGameData, 'creatorId' | 'thumbnailUrl'>> & {
+	thumbnailUrl?: string | null;
+};
 
 export type PaginateGamesPayload = {
 	search?: string;

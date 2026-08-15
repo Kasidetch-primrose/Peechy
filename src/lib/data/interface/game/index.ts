@@ -139,7 +139,7 @@ export interface IUpdateGameRequest {
 	description?: string;
 	difficulty?: string;
 	isPublic?: boolean;
-	thumbnailUrl?: string;
+	thumbnailUrl?: string | null;
 	thumbnailPositionX?: number;
 	thumbnailPositionY?: number;
 }
