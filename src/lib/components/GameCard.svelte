@@ -26,10 +26,11 @@
 		hard: '#FF6B6B'
 	};
 
-	let { game }: { game: IGame } = $props();
+	let { game, confirmUnlike = false }: { game: IGame; confirmUnlike?: boolean } = $props();
 	let likeLoading = $state(false);
 	let liked = $state(false);
 	let likes = $state(0);
+	let showUnlikeConfirm = $state(false);
 
 	const coverGradient = $derived(COVER_COLORS[game.id % COVER_COLORS.length]);
 	const emoji = $derived(EMOJIS[game.id % EMOJIS.length]);
@@ -40,9 +41,7 @@
 		likes = game.likes ?? 0;
 	});
 
-	async function handleToggleLike(e: MouseEvent) {
-		e.preventDefault();
-		e.stopPropagation();
+	async function toggleLike() {
 		const userId = $authUserStore.user?.id;
 		if (!userId || likeLoading) return;
 
@@ -67,6 +66,29 @@
 		} finally {
 			likeLoading = false;
 		}
+	}
+
+	function handleToggleLike(e: MouseEvent) {
+		e.preventDefault();
+		e.stopPropagation();
+		if (confirmUnlike && liked) {
+			showUnlikeConfirm = true;
+			return;
+		}
+		toggleLike();
+	}
+
+	function confirmUnlikeAction(e: MouseEvent) {
+		e.preventDefault();
+		e.stopPropagation();
+		showUnlikeConfirm = false;
+		toggleLike();
+	}
+
+	function cancelUnlikeAction(e: MouseEvent) {
+		e.preventDefault();
+		e.stopPropagation();
+		showUnlikeConfirm = false;
 	}
 </script>
 
@@ -191,5 +213,44 @@
 				<span class="text-[0.68rem] font-semibold text-inherit">{likes.toLocaleString()}</span>
 			{/if}
 		</button>
+	{/if}
+
+	<!-- Unlike confirmation modal -->
+	{#if showUnlikeConfirm}
+		<div
+			class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+			role="presentation"
+			onclick={cancelUnlikeAction}
+		>
+			<div
+				class="w-1/2 rounded-2xl bg-white p-lg text-center shadow-lg"
+				role="dialog"
+				aria-modal="true"
+				aria-label="ยืนยันการยกเลิกถูกใจ"
+				onclick={(e) => e.stopPropagation()}
+			>
+				<span class="text-4xl">💔</span>
+				<p class="mt-md font-semibold text-gray-900">ยกเลิกถูกใจเกมนี้ ?</p>
+				<p class="mt-2xs text-sm text-gray-500">
+					"{game.name}" จะถูกนำออกจากรายการเกมที่ถูกใจของคุณ
+				</p>
+				<div class="mt-lg flex gap-sm">
+					<button
+						type="button"
+						onclick={cancelUnlikeAction}
+						class="flex-1 rounded-lg border border-gray-200 px-md py-sm text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50 focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:outline-none"
+					>
+						ยกเลิก
+					</button>
+					<button
+						type="button"
+						onclick={confirmUnlikeAction}
+						class="flex-1 rounded-lg bg-red-500 px-md py-sm text-sm font-medium text-white transition-colors hover:bg-red-600 focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:outline-none"
+					>
+						ยืนยัน
+					</button>
+				</div>
+			</div>
+		</div>
 	{/if}
 </div>

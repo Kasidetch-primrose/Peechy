@@ -6,15 +6,23 @@ import GameService from '$lib/data/services/game';
 import type { IGame } from '$lib/data/interface/game';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
+export type ProfileTab = 'created' | 'liked';
+
 interface ProfileState {
 	loading: boolean;
 	games: IGame[];
+	likedLoading: boolean;
+	likedGames: IGame[];
+	activeTab: ProfileTab;
 }
 
 // ── Store ─────────────────────────────────────────────────────────────────────
 const initial: ProfileState = {
 	loading: true,
-	games: []
+	games: [],
+	likedLoading: true,
+	likedGames: [],
+	activeTab: 'created'
 };
 
 export const profileStore = writable<ProfileState>({ ...initial });
@@ -40,16 +48,32 @@ export function resetProfileStore() {
 }
 
 // ── Actions ───────────────────────────────────────────────────────────────────
-export async function loadGames(userId: number) {
+export async function loadGames(userId: number, viewerUserId?: number) {
 	profileStore.update((s) => ({ ...s, loading: true }));
 	try {
-		const res = await GameService.paginate({ creatorId: userId }, 1, 50);
+		const res = await GameService.paginate({ creatorId: userId, viewerUserId }, 1, 50);
 		if (res.status === 'success') {
 			profileStore.update((s) => ({ ...s, games: res.docs }));
 		}
 	} finally {
 		profileStore.update((s) => ({ ...s, loading: false }));
 	}
+}
+
+export async function loadLikedGames(userId: number, viewerUserId?: number) {
+	profileStore.update((s) => ({ ...s, likedLoading: true }));
+	try {
+		const res = await GameService.paginate({ likedByUserId: userId, viewerUserId }, 1, 50);
+		if (res.status === 'success') {
+			profileStore.update((s) => ({ ...s, likedGames: res.docs }));
+		}
+	} finally {
+		profileStore.update((s) => ({ ...s, likedLoading: false }));
+	}
+}
+
+export function setActiveTab(tab: ProfileTab) {
+	profileStore.update((s) => ({ ...s, activeTab: tab }));
 }
 
 export async function logout() {

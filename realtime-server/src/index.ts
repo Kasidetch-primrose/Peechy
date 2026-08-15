@@ -6,7 +6,9 @@ import * as game from './game.js';
 import type { Player } from './types.js';
 
 const PORT = Number(process.env.PORT ?? 4001);
-const CORS_ORIGIN = process.env.CORS_ORIGIN ?? 'http://localhost:5173';
+const CORS_ORIGIN = (process.env.CORS_ORIGIN ?? 'http://localhost:5173')
+	.split(',')
+	.map((origin) => origin.trim());
 
 const httpServer = createServer();
 const io = new Server(httpServer, {

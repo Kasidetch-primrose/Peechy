@@ -27,6 +27,7 @@ export type PaginateGamesPayload = {
 	creatorId?: number;
 	isPublic?: boolean;
 	viewerUserId?: number;
+	likedByUserId?: number;
 	page?: number;
 	limit?: number;
 };
@@ -138,12 +139,22 @@ export async function paginate(payload: PaginateGamesPayload) {
 	const limit = Math.max(1, Math.min(100, payload.limit ?? 20));
 	const offset = (page - 1) * limit;
 
+	let likedGameIds: number[] | undefined;
+	if (payload.likedByUserId) {
+		const likedRows = await db
+			.select({ gameId: userGameLikes.gameId })
+			.from(userGameLikes)
+			.where(eq(userGameLikes.userId, payload.likedByUserId));
+		likedGameIds = likedRows.map((row) => row.gameId);
+	}
+
 	const where = and(
 		isNull(games.deletedAt),
 		payload.search ? ilike(games.name, `%${payload.search}%`) : undefined,
 		payload.difficulty ? eq(games.difficulty, payload.difficulty) : undefined,
 		payload.creatorId ? eq(games.creatorId, payload.creatorId) : undefined,
-		payload.isPublic !== undefined ? eq(games.isPublic, payload.isPublic) : undefined
+		payload.isPublic !== undefined ? eq(games.isPublic, payload.isPublic) : undefined,
+		likedGameIds ? inArray(games.id, likedGameIds.length > 0 ? likedGameIds : [-1]) : undefined
 	);
 
 	const [{ total }] = await db

@@ -101,6 +101,7 @@ export interface ISearchGames {
 	creatorId?: number;
 	isPublic?: boolean;
 	viewerUserId?: number;
+	likedByUserId?: number;
 }
 
 export interface ISearchImages {
