@@ -196,8 +196,8 @@
 
 			<!-- ! Thumbnail -->
 			{#if game.thumbnailUrl}
-				<div class="mb-3 max-h-1/2 flex-1 overflow-hidden rounded-2xl bg-gray-100 shadow-sm">
-					<img src={game.thumbnailUrl} alt={game.name} class="h-full w-full object-contain" />
+				<div class="mb-3 max-h-1/2 flex-1 self-center overflow-hidden rounded-2xl shadow-sm">
+					<img src={game.thumbnailUrl} alt={game.name} class="h-full w-auto object-contain" />
 				</div>
 			{/if}
 
