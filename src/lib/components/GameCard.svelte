@@ -112,7 +112,9 @@
 					class="flex h-full w-full scale-100 items-center justify-center transition-transform duration-550 ease-[cubic-bezier(0.25,0.46,0.45,0.94)] group-hover:scale-[1.08]"
 					style="background: {coverGradient};"
 				>
-					<span class="text-5xl [filter:drop-shadow(0_4px_10px_rgba(0,0,0,0.15))]">{emoji}</span>
+					<span class="-translate-y-[3.6rem] text-5xl [filter:drop-shadow(0_4px_10px_rgba(0,0,0,0.15))]"
+						>{emoji}</span
+					>
 				</div>
 			{/if}
 		</div>
