@@ -1,5 +1,6 @@
 import { json } from '@sveltejs/kit';
 import * as sessionsLogic from '$lib/server/logic/game-sessions';
+import { verifyAccessToken } from '$lib/server/auth-service';
 import type { RequestHandler } from './$types';
 
 function serverErr(e: unknown) {
@@ -12,17 +13,23 @@ function serverErr(e: unknown) {
 	return json({ status: 'error', error: msg }, { status: 500 });
 }
 
-// POST /api/game-sessions — CreateOne
+// POST /api/game-sessions — CreateOne (userId is always taken from the caller's own token)
 export const POST: RequestHandler = async ({ request }) => {
-	const body = await request.json();
-	const { userId, gameId } = body;
+	const authHeader = request.headers.get('Authorization');
+	const claims = authHeader?.startsWith('Bearer ') ? verifyAccessToken(authHeader.slice(7)) : null;
+	if (!claims) {
+		return json({ status: 'error', error: 'Unauthorized' }, { status: 401 });
+	}
 
-	if (!userId || !gameId) {
-		return json({ status: 'error', error: 'userId and gameId are required' }, { status: 400 });
+	const body = await request.json();
+	const { gameId } = body;
+
+	if (!gameId) {
+		return json({ status: 'error', error: 'gameId is required' }, { status: 400 });
 	}
 
 	try {
-		const doc = await sessionsLogic.createOne(body);
+		const doc = await sessionsLogic.createOne({ ...body, userId: claims.userId });
 		return json({ status: 'success', doc }, { status: 201 });
 	} catch (e) {
 		return serverErr(e);

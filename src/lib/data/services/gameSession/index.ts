@@ -9,10 +9,16 @@ import type {
 } from '$lib/data/interface/game';
 
 export default class GameSessionService {
-	static async create(data: ICreateSessionRequest): Promise<ISingleResponse<IGameSession> & IStatusResponse> {
+	static async create(
+		data: ICreateSessionRequest,
+		accessToken: string
+	): Promise<ISingleResponse<IGameSession> & IStatusResponse> {
 		const res = await fetch('/api/game-sessions', {
 			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
+			headers: {
+				'Content-Type': 'application/json',
+				Authorization: `Bearer ${accessToken}`
+			},
 			body: JSON.stringify(data)
 		});
 		return res.json();
@@ -25,11 +31,15 @@ export default class GameSessionService {
 
 	static async update(
 		id: number,
-		data: IUpdateSessionRequest
+		data: IUpdateSessionRequest,
+		accessToken: string
 	): Promise<ISingleResponse<IGameSession> & IStatusResponse> {
 		const res = await fetch(`/api/game-sessions/${id}`, {
 			method: 'PUT',
-			headers: { 'Content-Type': 'application/json' },
+			headers: {
+				'Content-Type': 'application/json',
+				Authorization: `Bearer ${accessToken}`
+			},
 			body: JSON.stringify(data)
 		});
 		return res.json();

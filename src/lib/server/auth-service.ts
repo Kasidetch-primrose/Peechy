@@ -26,9 +26,13 @@ const BCRYPT_ROUNDS = 12;
 const OTP_TTL_SECONDS = 10 * 60; // 10 minutes
 const ACCESS_TOKEN_SECONDS = 24 * 60 * 60; // 24 hours (matches Go)
 const REFRESH_TOKEN_SECONDS = 90 * 24 * 60 * 60; // 90 days (matches Go)
+const MAX_OTP_ATTEMPTS = 5;
+const OTP_RESEND_COOLDOWN_SECONDS = 60;
 
 // Redis key namespaces
 const otpKey = (email: string) => `otp:${email}`;
+const otpAttemptsKey = (email: string) => `otp_attempts:${email}`;
+const otpResendCooldownKey = (email: string) => `otp_resend_cooldown:${email}`;
 const refreshKey = (userId: number) => `refresh:${userId}`;
 
 function isRedisReady() {
@@ -149,6 +153,7 @@ export async function register(username: string, email: string, password: string
 	requireRedisReady();
 	const otp = generateOtp();
 	await redis.set(otpKey(email), otp, 'EX', OTP_TTL_SECONDS);
+	await redis.del(otpAttemptsKey(email));
 
 	// Send verification email
 	await mailer.sendMail({
@@ -173,6 +178,12 @@ export async function register(username: string, email: string, password: string
 export async function verifyOtp(email: string, otp: string) {
 	requireRedisReady();
 
+	const attempts = await redis.incr(otpAttemptsKey(email));
+	if (attempts === 1) await redis.expire(otpAttemptsKey(email), OTP_TTL_SECONDS);
+	if (attempts > MAX_OTP_ATTEMPTS) {
+		throw new Error('Too many attempts. Please request a new OTP.');
+	}
+
 	const stored = await redis.get(otpKey(email));
 
 	if (!stored) throw new Error('OTP expired or not found');
@@ -181,6 +192,7 @@ export async function verifyOtp(email: string, otp: string) {
 	await db.update(users).set({ isVerified: true }).where(eq(users.email, email));
 
 	await redis.del(otpKey(email));
+	await redis.del(otpAttemptsKey(email));
 }
 
 // ---------------------------------------------------------------------------
@@ -201,8 +213,15 @@ export async function resendOtp(email: string) {
 	if (user.isVerified) throw new Error('Email is already verified');
 
 	requireRedisReady();
+
+	const cooldownSet = await redis.set(otpResendCooldownKey(email), '1', 'EX', OTP_RESEND_COOLDOWN_SECONDS, 'NX');
+	if (cooldownSet !== 'OK') {
+		throw new Error('Please wait before requesting another OTP.');
+	}
+
 	const otp = generateOtp();
 	await redis.set(otpKey(email), otp, 'EX', OTP_TTL_SECONDS);
+	await redis.del(otpAttemptsKey(email));
 
 	await mailer.sendMail({
 		from: env.SMTP_FROM,

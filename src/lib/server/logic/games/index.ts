@@ -72,8 +72,32 @@ export async function updateOne(id: number, data: UpdateGameData) {
 		.update(games)
 		.set(data)
 		.where(and(eq(games.id, id), isNull(games.deletedAt)))
-		.returning();
+		.returning(publicGameFields);
 	return updated ?? null;
+}
+
+/**
+ * Throws 'Game not found' or 'Unauthorized' if the caller (by userId or
+ * anonymous creatorToken) does not own the game. Resolves silently otherwise.
+ */
+export async function verifyGameOwnership(
+	id: number,
+	auth: { userId?: number; creatorToken?: string }
+): Promise<void> {
+	const [row] = await db
+		.select({ creatorId: games.creatorId, creatorToken: games.creatorToken })
+		.from(games)
+		.where(and(eq(games.id, id), isNull(games.deletedAt)));
+
+	if (!row) throw new Error('Game not found');
+
+	if (auth.userId !== undefined && auth.userId !== null) {
+		if (row.creatorId !== auth.userId) throw new Error('Unauthorized');
+	} else if (auth.creatorToken) {
+		if (!row.creatorToken || row.creatorToken !== auth.creatorToken) throw new Error('Unauthorized');
+	} else {
+		throw new Error('Unauthorized');
+	}
 }
 
 export async function deleteOne(id: number, auth: { userId?: number; creatorToken?: string }) {
@@ -125,7 +149,7 @@ export async function deleteWithToken(ids: number[], creatorToken: string) {
 		.where(and(inArray(games.id, ids), isNull(games.deletedAt)));
 
 	for (const row of rows) {
-		if (row.creatorToken !== null && row.creatorToken !== creatorToken) {
+		if (row.creatorToken === null || row.creatorToken !== creatorToken) {
 			throw new Error('Unauthorized');
 		}
 	}

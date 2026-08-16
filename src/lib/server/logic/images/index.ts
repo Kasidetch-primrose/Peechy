@@ -33,6 +33,23 @@ export type PaginateImagesPayload = {
 // Logic functions
 // ---------------------------------------------------------------------------
 
+export async function getGameId(id: number): Promise<number | null> {
+	const [item] = await db
+		.select({ gameId: images.gameId })
+		.from(images)
+		.where(and(eq(images.id, id), isNull(images.deletedAt)));
+	return item?.gameId ?? null;
+}
+
+export async function getGameIdsForImages(ids: number[]): Promise<number[]> {
+	if (ids.length === 0) return [];
+	const rows = await db
+		.select({ gameId: images.gameId })
+		.from(images)
+		.where(and(inArray(images.id, ids), isNull(images.deletedAt)));
+	return [...new Set(rows.map((r) => r.gameId))];
+}
+
 export async function createOne(data: CreateImageData) {
 	const [created] = await db.insert(images).values(data).returning();
 	return { ...created, hints: [] };

@@ -463,17 +463,27 @@ export async function handleSubmit(e: SubmitEvent, editId: number | null) {
 		let gameId: number;
 		const posX = thumbnailUrl ? thumbnailPosition.x : undefined;
 		const posY = thumbnailUrl ? thumbnailPosition.y : undefined;
+		const accessToken = get(authUserStore).accessToken || undefined;
+		let creatorToken: string | undefined;
 
 		if (editId) {
-			const res = await GameService.update(editId, {
-				name: gameName.trim(),
-				description: description.trim() || undefined,
-				difficulty: difficulty || undefined,
-				isPublic,
-				thumbnailUrl: thumbnailUrl || null,
-				thumbnailPositionX: posX,
-				thumbnailPositionY: posY
-			});
+			if (typeof localStorage !== 'undefined') {
+				creatorToken = localStorage.getItem(`creator_token_${editId}`) ?? undefined;
+			}
+			const res = await GameService.update(
+				editId,
+				{
+					name: gameName.trim(),
+					description: description.trim() || undefined,
+					difficulty: difficulty || undefined,
+					isPublic,
+					thumbnailUrl: thumbnailUrl || null,
+					thumbnailPositionX: posX,
+					thumbnailPositionY: posY
+				},
+				accessToken,
+				creatorToken
+			);
 			if (res.status !== 'success') throw new Error(res.error ?? 'ไม่สามารถบันทึกเกมได้');
 			gameId = editId;
 		} else {
@@ -490,11 +500,13 @@ export async function handleSubmit(e: SubmitEvent, editId: number | null) {
 			if (res.status !== 'success') throw new Error(res.error ?? 'ไม่สามารถสร้างเกมได้');
 			gameId = res.doc.id;
 			if (res.doc.creatorToken) {
+				creatorToken = res.doc.creatorToken;
 				localStorage.setItem(`creator_token_${gameId}`, res.doc.creatorToken);
 			}
 		}
 
-		if (pendingDeletes.length > 0) await ImageService.deleteMany(pendingDeletes);
+		if (pendingDeletes.length > 0)
+			await ImageService.deleteMany(pendingDeletes, accessToken, creatorToken);
 
 		for (let i = 0; i < slots.length; i++) {
 			const slot = slots[i];
@@ -509,10 +521,10 @@ export async function handleSubmit(e: SubmitEvent, editId: number | null) {
 			};
 			let imageId: number;
 			if (slot.dbId !== undefined) {
-				await ImageService.update(slot.dbId, payload);
+				await ImageService.update(slot.dbId, payload, accessToken, creatorToken);
 				imageId = slot.dbId;
 			} else {
-				const created = await ImageService.create(payload);
+				const created = await ImageService.create(payload, accessToken, creatorToken);
 				if (created.status !== 'success') throw new Error('ไม่สามารถบันทึกรูปภาพได้');
 				imageId = created.doc.id;
 			}
@@ -520,7 +532,9 @@ export async function handleSubmit(e: SubmitEvent, editId: number | null) {
 				imageId,
 				slot.hints
 					.filter((h) => h.hint.trim())
-					.map((h, idx) => ({ hint: h.hint.trim(), orderIndex: idx }))
+					.map((h, idx) => ({ hint: h.hint.trim(), orderIndex: idx })),
+				accessToken,
+				creatorToken
 			);
 		}
 

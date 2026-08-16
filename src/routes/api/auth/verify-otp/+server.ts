@@ -13,6 +13,8 @@ export const POST: RequestHandler = async ({ request }) => {
 		await verifyOtp(email, otp);
 		return json({ status: 'success', message: 'Email verified successfully.' });
 	} catch (e) {
-		return json({ status: 'error', message: (e as Error).message }, { status: 400 });
+		const message = (e as Error).message;
+		const status = message.startsWith('Too many attempts') ? 429 : 400;
+		return json({ status: 'error', message }, { status });
 	}
 };

@@ -10,12 +10,16 @@ import type {
 
 export default class ImageService {
 	static async create(
-		data: ICreateImageRequest
+		data: ICreateImageRequest,
+		accessToken?: string,
+		creatorToken?: string
 	): Promise<ISingleResponse<IGameImage> & IStatusResponse> {
+		const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+		if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
 		const res = await fetch('/api/images', {
 			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify(data)
+			headers,
+			body: JSON.stringify({ ...data, creatorToken })
 		});
 		return res.json();
 	}
@@ -27,21 +31,31 @@ export default class ImageService {
 
 	static async update(
 		id: number,
-		data: IUpdateImageRequest
+		data: IUpdateImageRequest,
+		accessToken?: string,
+		creatorToken?: string
 	): Promise<ISingleResponse<IGameImage> & IStatusResponse> {
+		const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+		if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
 		const res = await fetch(`/api/images/${id}`, {
 			method: 'PUT',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify(data)
+			headers,
+			body: JSON.stringify({ ...data, creatorToken })
 		});
 		return res.json();
 	}
 
-	static async deleteMany(ids: number[]): Promise<IStatusResponse> {
+	static async deleteMany(
+		ids: number[],
+		accessToken?: string,
+		creatorToken?: string
+	): Promise<IStatusResponse> {
+		const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+		if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
 		const res = await fetch('/api/images', {
 			method: 'DELETE',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ ids })
+			headers,
+			body: JSON.stringify({ ids, creatorToken })
 		});
 		return res.json();
 	}
@@ -61,12 +75,16 @@ export default class ImageService {
 
 	static async syncHints(
 		imageId: number,
-		hints: { hint: string; orderIndex: number }[]
+		hints: { hint: string; orderIndex: number }[],
+		accessToken?: string,
+		creatorToken?: string
 	): Promise<IStatusResponse> {
+		const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+		if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
 		const res = await fetch(`/api/images/${imageId}/hints`, {
 			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({ hints })
+			headers,
+			body: JSON.stringify({ hints, creatorToken })
 		});
 		return res.json();
 	}

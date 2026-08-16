@@ -1,16 +1,17 @@
 import { json } from '@sveltejs/kit';
-import { logout } from '$lib/server/auth-service';
+import { logout, verifyAccessToken } from '$lib/server/auth-service';
 import type { RequestHandler } from './$types';
 
 export const POST: RequestHandler = async ({ request }) => {
-	const { userId } = await request.json();
+	const authHeader = request.headers.get('Authorization');
+	const claims = authHeader?.startsWith('Bearer ') ? verifyAccessToken(authHeader.slice(7)) : null;
 
-	if (!userId) {
-		return json({ status: 'error', message: 'userId is required' }, { status: 400 });
+	if (!claims) {
+		return json({ status: 'error', message: 'Unauthorized' }, { status: 401 });
 	}
 
 	try {
-		await logout(userId);
+		await logout(claims.userId);
 		return json({ status: 'success' });
 	} catch (e) {
 		return json({ status: 'error', message: (e as Error).message }, { status: 500 });

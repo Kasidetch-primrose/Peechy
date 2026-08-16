@@ -1,5 +1,7 @@
 import { json } from '@sveltejs/kit';
 import * as imagesLogic from '$lib/server/logic/images';
+import * as gamesLogic from '$lib/server/logic/games';
+import { extractAuth } from '$lib/server/request-auth';
 import type { RequestHandler } from './$types';
 
 function serverErr(e: unknown) {
@@ -61,25 +63,47 @@ export const POST: RequestHandler = async ({ request }) => {
 	}
 
 	try {
+		const auth = extractAuth(request, body);
+		await gamesLogic.verifyGameOwnership(gameId, auth);
+
 		const doc = await imagesLogic.createOne(body);
 		return json({ status: 'success', doc }, { status: 201 });
 	} catch (e) {
+		if (e instanceof Error && e.message === 'Unauthorized') {
+			return json({ status: 'error', error: 'Unauthorized' }, { status: 403 });
+		}
+		if (e instanceof Error && e.message === 'Game not found') {
+			return json({ status: 'error', error: 'game not found' }, { status: 404 });
+		}
 		return serverErr(e);
 	}
 };
 
-// DELETE /api/images — DeleteMany (body: { ids: number[] })
+// DELETE /api/images — DeleteMany (body: { ids: number[], creatorToken?: string })
 export const DELETE: RequestHandler = async ({ request }) => {
-	const { ids } = await request.json();
+	const body = await request.json();
+	const { ids } = body;
 
 	if (!Array.isArray(ids) || ids.length === 0) {
 		return json({ status: 'error', error: 'ids array is required' }, { status: 400 });
 	}
 
 	try {
+		const gameIds = await imagesLogic.getGameIdsForImages(ids);
+		const auth = extractAuth(request, body);
+		for (const gameId of gameIds) {
+			await gamesLogic.verifyGameOwnership(gameId, auth);
+		}
+
 		await imagesLogic.deleteMany(ids);
 		return json({ status: 'success' });
 	} catch (e) {
+		if (e instanceof Error && e.message === 'Unauthorized') {
+			return json({ status: 'error', error: 'Unauthorized' }, { status: 403 });
+		}
+		if (e instanceof Error && e.message === 'Game not found') {
+			return json({ status: 'error', error: 'game not found' }, { status: 404 });
+		}
 		return serverErr(e);
 	}
 };

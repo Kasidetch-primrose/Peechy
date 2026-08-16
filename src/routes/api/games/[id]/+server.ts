@@ -1,6 +1,7 @@
 import { json } from '@sveltejs/kit';
 import * as gamesLogic from '$lib/server/logic/games';
 import { verifyAccessToken } from '$lib/server/auth-service';
+import { extractAuth } from '$lib/server/request-auth';
 import type { RequestHandler } from './$types';
 
 const ALLOWED_DIFFICULTIES = ['easy', 'medium', 'hard'];
@@ -62,6 +63,9 @@ export const PUT: RequestHandler = async ({ params, request }) => {
 			return json({ status: 'error', error: 'thumbnailUrl must be a valid http/https URL' }, { status: 400 });
 		}
 
+		const auth = extractAuth(request, body);
+		await gamesLogic.verifyGameOwnership(id, auth);
+
 		const doc = await gamesLogic.updateOne(id, {
 			name, description, difficulty, isPublic, thumbnailUrl,
 			thumbnailPositionX: typeof thumbnailPositionX === 'number' ? thumbnailPositionX : undefined,
@@ -72,6 +76,12 @@ export const PUT: RequestHandler = async ({ params, request }) => {
 		}
 		return json({ status: 'success', doc });
 	} catch (e) {
+		if (e instanceof Error && e.message === 'Unauthorized') {
+			return json({ status: 'error', error: 'Unauthorized' }, { status: 403 });
+		}
+		if (e instanceof Error && e.message === 'Game not found') {
+			return json({ status: 'error', error: 'game not found' }, { status: 404 });
+		}
 		return serverErr(e);
 	}
 };

@@ -126,20 +126,23 @@ export async function loadGame(gameId: number) {
 			throw new Error('เกมนี้ยังไม่มีรูปภาพ');
 
 		const images = [...imagesRes.docs].sort((a, b) => a.orderIndex - b.orderIndex);
-		const user = get(authUserStore).user;
+		const { user, accessToken } = get(authUserStore);
 
 		// Create or reuse session
 		let session: IGameSession | null = null;
-		if (user) {
-			const sessionRes = await GameSessionService.create({
-				userId: user.id,
-				gameId,
-				currentImageIndex: 0,
-				revealedTiles: [],
-				undoStack: [],
-				score: 0,
-				isFinished: false
-			});
+		if (user && accessToken) {
+			const sessionRes = await GameSessionService.create(
+				{
+					userId: user.id,
+					gameId,
+					currentImageIndex: 0,
+					revealedTiles: [],
+					undoStack: [],
+					score: 0,
+					isFinished: false
+				},
+				accessToken
+			);
 			if (sessionRes.status === 'success') session = sessionRes.doc;
 		}
 
@@ -262,11 +265,14 @@ export function nextImage() {
 		// Game finished
 		gamePlayStore.update((s) => ({ ...s, finished: true }));
 		if (session) {
-			GameSessionService.update(session.id, {
-				currentImageIndex: nextIdx,
-				score,
-				isFinished: true
-			});
+			const accessToken = get(authUserStore).accessToken;
+			if (accessToken) {
+				GameSessionService.update(
+					session.id,
+					{ currentImageIndex: nextIdx, score, isFinished: true },
+					accessToken
+				);
+			}
 		}
 		return;
 	}
@@ -294,10 +300,11 @@ export function nextImage() {
 async function _persistSession() {
 	const { session, imageIdx, revealedTiles, undoStack, score } = get(gamePlayStore);
 	if (!session) return;
-	await GameSessionService.update(session.id, {
-		currentImageIndex: imageIdx,
-		revealedTiles,
-		undoStack,
-		score
-	});
+	const accessToken = get(authUserStore).accessToken;
+	if (!accessToken) return;
+	await GameSessionService.update(
+		session.id,
+		{ currentImageIndex: imageIdx, revealedTiles, undoStack, score },
+		accessToken
+	);
 }

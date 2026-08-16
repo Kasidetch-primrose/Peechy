@@ -1,5 +1,6 @@
 import { json } from '@sveltejs/kit';
 import * as sessionsLogic from '$lib/server/logic/game-sessions';
+import { verifyAccessToken } from '$lib/server/auth-service';
 import type { RequestHandler } from './$types';
 
 function serverErr(e: unknown) {
@@ -38,7 +39,21 @@ export const PUT: RequestHandler = async ({ params, request }) => {
 		return json({ status: 'error', error: 'invalid id' }, { status: 400 });
 	}
 
+	const authHeader = request.headers.get('Authorization');
+	const claims = authHeader?.startsWith('Bearer ') ? verifyAccessToken(authHeader.slice(7)) : null;
+	if (!claims) {
+		return json({ status: 'error', error: 'Unauthorized' }, { status: 401 });
+	}
+
 	try {
+		const existing = await sessionsLogic.getOne(id);
+		if (!existing) {
+			return json({ status: 'error', error: 'session not found' }, { status: 404 });
+		}
+		if (existing.userId !== claims.userId) {
+			return json({ status: 'error', error: 'Unauthorized' }, { status: 403 });
+		}
+
 		const body = await request.json();
 
 		// Whitelist: only these fields may be updated

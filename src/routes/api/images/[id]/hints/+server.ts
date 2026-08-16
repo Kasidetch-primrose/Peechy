@@ -1,5 +1,7 @@
 import { json } from '@sveltejs/kit';
 import * as imagesLogic from '$lib/server/logic/images';
+import * as gamesLogic from '$lib/server/logic/games';
+import { extractAuth } from '$lib/server/request-auth';
 import type { RequestHandler } from './$types';
 
 const MAX_HINT_LENGTH = 500;
@@ -23,6 +25,11 @@ export const POST: RequestHandler = async ({ params, request }) => {
 	}
 
 	try {
+		const gameId = await imagesLogic.getGameId(id);
+		if (gameId === null) {
+			return json({ status: 'error', error: 'image not found' }, { status: 404 });
+		}
+
 		const body = await request.json();
 
 		if (!Array.isArray(body.hints)) {
@@ -44,9 +51,18 @@ export const POST: RequestHandler = async ({ params, request }) => {
 			hints.push({ hint: item.hint.trim(), orderIndex: item.orderIndex });
 		}
 
+		const auth = extractAuth(request, body);
+		await gamesLogic.verifyGameOwnership(gameId, auth);
+
 		const docs = await imagesLogic.syncHints(id, hints);
 		return json({ status: 'success', docs });
 	} catch (e) {
+		if (e instanceof Error && e.message === 'Unauthorized') {
+			return json({ status: 'error', error: 'Unauthorized' }, { status: 403 });
+		}
+		if (e instanceof Error && e.message === 'Game not found') {
+			return json({ status: 'error', error: 'image not found' }, { status: 404 });
+		}
 		return serverErr(e);
 	}
 };
