@@ -4,6 +4,7 @@
 	import './layout.css';
 	import favicon from '$lib/assets/favicon.svg';
 	import Navbar from '$lib/components/Navbar.svelte';
+	import RulesFab from '$lib/components/RulesFab.svelte';
 	import GradientBackground from '$lib/components/ui/gradient-background.svelte';
 
 	let { children } = $props();
@@ -24,4 +25,5 @@
 			{@render children()}
 		{/key}
 	</div>
+	<RulesFab />
 </GradientBackground>
