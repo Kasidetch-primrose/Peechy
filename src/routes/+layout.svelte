@@ -2,7 +2,7 @@
 	import { page } from '$app/state';
 	import { navigating } from '$app/stores';
 	import './layout.css';
-	import favicon from '$lib/assets/favicon.svg';
+	import favicon from '$lib/assets/logo.png';
 	import Navbar from '$lib/components/Navbar.svelte';
 	import RulesFab from '$lib/components/RulesFab.svelte';
 	import GradientBackground from '$lib/components/ui/gradient-background.svelte';

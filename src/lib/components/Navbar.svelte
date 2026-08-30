@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
-	import favicon from '$lib/assets/favicon.svg';
+	import logo from '$lib/assets/logo.png';
 	import AuthService from '$lib/data/services/auth';
 	import { authUserStore } from '$lib/data/stores/authUser';
 	import { connect, joinRoom } from '$lib/data/stores/multiplayer';
@@ -56,7 +56,7 @@
 			class="flex items-center gap-sm text-xl font-bold text-primary-500
                    focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:outline-none"
 		>
-			<img src={favicon} alt="Peechy logo" class="h-8 w-8" />
+			<img src={logo} alt="Peechy logo" class="h-8 w-8 object-contain" />
 			Peechy 🍑
 		</a>
 
