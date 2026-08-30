@@ -10,7 +10,14 @@
 	let { children } = $props();
 </script>
 
-<svelte:head><link rel="icon" href={favicon} /></svelte:head>
+<svelte:head>
+	<link rel="icon" href={favicon} />
+	<title>Peechy - เกมเปิดป้ายทายภาพ</title>
+	<meta
+		name="description"
+		content="Peechy เปิดป้ายทีละช่อง แล้วเดารูปข้างหลัง เหมาะกับทุกเพศทุกวัย เล่นได้ทั้งคนเดียวและหลายคน !"
+	/>
+</svelte:head>
 
 {#if $navigating}
 	<div class="fixed inset-x-0 top-0 z-[100] h-1 overflow-hidden bg-primary-100">
@@ -19,7 +26,7 @@
 {/if}
 
 <GradientBackground class="min-h-screen">
-	<div class="flex w-full min-h-screen flex-col">
+	<div class="flex min-h-screen w-full flex-col">
 		<Navbar />
 		{#key `${page.url.pathname}${page.url.search}`}
 			{@render children()}
