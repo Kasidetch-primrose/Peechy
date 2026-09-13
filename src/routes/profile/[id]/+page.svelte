@@ -56,13 +56,20 @@
 
 				<!-- Logout (owner only) -->
 				{#if isOwner}
-					<button
-						type="button"
-						onclick={logout}
-						class="rounded-lg border border-red-200 px-md py-xs text-sm font-medium text-red-600 transition-colors hover:bg-red-50 focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:outline-none"
-					>
-						ออกจากระบบ
-					</button>
+					<div class="flex flex-col items-center gap-sm sm:items-end">
+						<button
+							type="button"
+							onclick={logout}
+							class="rounded-lg border border-red-200 px-md py-xs text-sm font-medium text-red-600 transition-colors hover:bg-red-50 focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:outline-none"
+						>
+							ออกจากระบบ
+						</button>
+						<div class="flex items-center gap-sm text-xs text-gray-400">
+							<a href="/legal/terms" class="hover:text-primary-500 hover:underline">ข้อกำหนดการใช้งาน</a>
+							<span class="text-gray-300">·</span>
+							<a href="/legal/privacy" class="hover:text-primary-500 hover:underline">นโยบายความเป็นส่วนตัว</a>
+						</div>
+					</div>
 				{/if}
 			</div>
 

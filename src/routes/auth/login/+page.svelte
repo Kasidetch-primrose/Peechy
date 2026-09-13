@@ -64,5 +64,13 @@
 		/>
 
 		<!-- todo: facebook & google login -->
+
+		<!-- Legal links -->
+		<p class="mt-5 text-center text-xs text-gray-400">
+			การเข้าสู่ระบบถือว่าท่านยอมรับ
+			<a href="/legal/terms" class="font-medium text-primary-500 hover:underline">ข้อกำหนดการใช้งาน</a>
+			และ
+			<a href="/legal/privacy" class="font-medium text-primary-500 hover:underline">นโยบายความเป็นส่วนตัว</a>
+		</p>
 	</div>
 </div>

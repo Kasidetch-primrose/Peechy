@@ -10,6 +10,7 @@
 	let email = $state('');
 	let password = $state('');
 	let confirmPassword = $state('');
+	let acceptedTerms = $state(false);
 	let loading = $state(false);
 	let error = $state('');
 
@@ -53,6 +54,10 @@
 		}
 		if (password.length < 6) {
 			error = 'รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร';
+			return;
+		}
+		if (!acceptedTerms) {
+			error = 'กรุณายอมรับข้อกำหนดการใช้งานและนโยบายความเป็นส่วนตัว';
 			return;
 		}
 		error = '';
@@ -156,6 +161,25 @@
 					{/if}
 				</div>
 
+				<!-- Terms & Privacy -->
+				<label class="flex items-start gap-2.5 text-sm text-gray-600">
+					<input
+						type="checkbox"
+						bind:checked={acceptedTerms}
+						class="mt-0.5 h-4 w-4 shrink-0 rounded border-gray-300 text-primary-500 focus-visible:ring-2 focus-visible:ring-focus"
+					/>
+					<span>
+						ฉันยอมรับ
+						<a href="/legal/terms" target="_blank" class="font-medium text-primary-500 hover:underline">
+							ข้อกำหนดการใช้งาน
+						</a>
+						และ
+						<a href="/legal/privacy" target="_blank" class="font-medium text-primary-500 hover:underline">
+							นโยบายความเป็นส่วนตัว
+						</a>
+					</span>
+				</label>
+
 				<!-- Error -->
 				{#if error}
 					<p class="rounded-lg bg-red-50 px-4 py-2.5 text-sm text-red-600">{error}</p>
@@ -164,7 +188,7 @@
 				<!-- Submit -->
 				<button
 					type="submit"
-					disabled={loading || !passwordsMatch}
+					disabled={loading || !passwordsMatch || !acceptedTerms}
 					class="mt-1 w-full rounded-full bg-primary-500 py-2.5 text-sm font-semibold text-white transition hover:bg-primary-400 active:bg-primary-600 disabled:opacity-60"
 				>
 					{#if loading}
