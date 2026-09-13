@@ -42,6 +42,8 @@ export const isCreatorStore = derived(
 	([$detail, $auth]) => {
 		const game = $detail.game;
 		if (!game) return false;
+		// Admins can act as the creator for any game
+		if ($auth.user?.isAdmin) return true;
 		// Logged-in user who owns the game
 		if ($auth.user?.id && $auth.user.id === game.creatorId) return true;
 		// Guest creator: check for the token saved in localStorage at creation time

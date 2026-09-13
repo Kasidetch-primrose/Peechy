@@ -78,11 +78,12 @@ export async function updateOne(id: number, data: UpdateGameData) {
 
 /**
  * Throws 'Game not found' or 'Unauthorized' if the caller (by userId or
- * anonymous creatorToken) does not own the game. Resolves silently otherwise.
+ * anonymous creatorToken) does not own the game. Admins bypass ownership.
+ * Resolves silently otherwise.
  */
 export async function verifyGameOwnership(
 	id: number,
-	auth: { userId?: number; creatorToken?: string }
+	auth: { userId?: number; creatorToken?: string; isAdmin?: boolean }
 ): Promise<void> {
 	const [row] = await db
 		.select({ creatorId: games.creatorId, creatorToken: games.creatorToken })
@@ -90,6 +91,8 @@ export async function verifyGameOwnership(
 		.where(and(eq(games.id, id), isNull(games.deletedAt)));
 
 	if (!row) throw new Error('Game not found');
+
+	if (auth.isAdmin) return;
 
 	if (auth.userId !== undefined && auth.userId !== null) {
 		if (row.creatorId !== auth.userId) throw new Error('Unauthorized');
@@ -100,7 +103,10 @@ export async function verifyGameOwnership(
 	}
 }
 
-export async function deleteOne(id: number, auth: { userId?: number; creatorToken?: string }) {
+export async function deleteOne(
+	id: number,
+	auth: { userId?: number; creatorToken?: string; isAdmin?: boolean }
+) {
 	const [row] = await db
 		.select({ creatorId: games.creatorId, creatorToken: games.creatorToken })
 		.from(games)
@@ -108,12 +114,14 @@ export async function deleteOne(id: number, auth: { userId?: number; creatorToke
 
 	if (!row) return null;
 
-	if (auth.userId !== undefined && auth.userId !== null) {
-		if (row.creatorId !== auth.userId) throw new Error('Unauthorized');
-	} else if (auth.creatorToken) {
-		if (!row.creatorToken || row.creatorToken !== auth.creatorToken) throw new Error('Unauthorized');
-	} else {
-		throw new Error('Unauthorized');
+	if (!auth.isAdmin) {
+		if (auth.userId !== undefined && auth.userId !== null) {
+			if (row.creatorId !== auth.userId) throw new Error('Unauthorized');
+		} else if (auth.creatorToken) {
+			if (!row.creatorToken || row.creatorToken !== auth.creatorToken) throw new Error('Unauthorized');
+		} else {
+			throw new Error('Unauthorized');
+		}
 	}
 
 	const [deleted] = await db

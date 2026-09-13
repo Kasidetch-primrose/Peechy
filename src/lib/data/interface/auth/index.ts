@@ -28,6 +28,7 @@ export interface IAuthUser {
 	email: string;
 	username: string;
 	name: string | null;
+	isAdmin?: boolean;
 }
 
 export interface ILoginResponse {

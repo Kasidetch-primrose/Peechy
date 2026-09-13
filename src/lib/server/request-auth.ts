@@ -1,6 +1,6 @@
 import { verifyAccessToken } from './auth-service';
 
-export type RequestAuth = { userId?: number; creatorToken?: string };
+export type RequestAuth = { userId?: number; creatorToken?: string; isAdmin?: boolean };
 
 /**
  * Resolves the caller's identity for ownership checks: a logged-in user's
@@ -13,7 +13,10 @@ export function extractAuth(request: Request, body?: Record<string, unknown> | n
 	const authHeader = request.headers.get('Authorization');
 	if (authHeader?.startsWith('Bearer ')) {
 		const claims = verifyAccessToken(authHeader.slice(7));
-		if (claims) auth.userId = claims.userId;
+		if (claims) {
+			auth.userId = claims.userId;
+			auth.isAdmin = claims.isAdmin;
+		}
 	}
 
 	if (auth.userId === undefined && body && typeof body.creatorToken === 'string') {

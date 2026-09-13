@@ -74,6 +74,7 @@ export interface JwtClaims {
 	email: string;
 	username: string;
 	name: string | null;
+	isAdmin: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -85,10 +86,16 @@ function generateOtp(): string {
 	return randomInt(100000, 999999).toString();
 }
 
-function generateTokens(userId: number, email: string, username: string, name: string | null) {
+function generateTokens(
+	userId: number,
+	email: string,
+	username: string,
+	name: string | null,
+	isAdmin: boolean
+) {
 	const now = Math.floor(Date.now() / 1000);
 
-	const basePayload = { userId, email, username, name, iss: ISSUER, aud: AUDIENCE };
+	const basePayload = { userId, email, username, name, isAdmin, iss: ISSUER, aud: AUDIENCE };
 
 	const accessToken = jwt.sign({ ...basePayload, sub: `${AUDIENCE}:${userId}` }, SECRET_KEY, {
 		expiresIn: ACCESS_TOKEN_SECONDS
@@ -256,7 +263,8 @@ export async function login(email: string, password: string) {
 		user.id,
 		user.email,
 		user.username,
-		user.name
+		user.name,
+		user.isAdmin
 	);
 
 	// Best-effort session cache; token issuance does not depend on Redis.
@@ -271,7 +279,8 @@ export async function login(email: string, password: string) {
 			id: user.id,
 			email: user.email,
 			username: user.username,
-			name: user.name
+			name: user.name,
+			isAdmin: user.isAdmin
 		}
 	};
 }
@@ -299,6 +308,7 @@ export async function refreshAccessToken(token: string) {
 			email: users.email,
 			username: users.username,
 			name: users.name,
+			isAdmin: users.isAdmin,
 			deletedAt: users.deletedAt
 		})
 		.from(users)
@@ -312,7 +322,8 @@ export async function refreshAccessToken(token: string) {
 		user.id,
 		user.email,
 		user.username,
-		user.name
+		user.name,
+		user.isAdmin
 	);
 	await tryRedisWrite('store rotated refresh token', () =>
 		redis.set(refreshKey(user.id), refreshToken, 'EX', REFRESH_TOKEN_SECONDS)
@@ -365,6 +376,7 @@ export async function loginWithOAuth(
 				email: users.email,
 				username: users.username,
 				name: users.name,
+				isAdmin: users.isAdmin,
 				deletedAt: users.deletedAt
 			})
 			.from(users)
@@ -377,7 +389,8 @@ export async function loginWithOAuth(
 			user.id,
 			user.email,
 			user.username,
-			user.name
+			user.name,
+			user.isAdmin
 		);
 		await tryRedisWrite('store refresh token', () =>
 			redis.set(refreshKey(user.id), refreshToken, 'EX', REFRESH_TOKEN_SECONDS)
@@ -385,7 +398,13 @@ export async function loginWithOAuth(
 		return {
 			accessToken,
 			refreshToken,
-			user: { id: user.id, email: user.email, username: user.username, name: user.name }
+			user: {
+				id: user.id,
+				email: user.email,
+				username: user.username,
+				name: user.name,
+				isAdmin: user.isAdmin
+			}
 		};
 	}
 
@@ -402,7 +421,8 @@ export async function loginWithOAuth(
 				existingUser.id,
 				existingUser.email,
 				existingUser.username,
-				existingUser.name
+				existingUser.name,
+				existingUser.isAdmin
 			);
 			await tryRedisWrite('store refresh token', () =>
 				redis.set(refreshKey(existingUser.id), refreshToken, 'EX', REFRESH_TOKEN_SECONDS)
@@ -414,7 +434,8 @@ export async function loginWithOAuth(
 					id: existingUser.id,
 					email: existingUser.email,
 					username: existingUser.username,
-					name: existingUser.name
+					name: existingUser.name,
+					isAdmin: existingUser.isAdmin
 				}
 			};
 		}
@@ -456,7 +477,8 @@ export async function loginWithOAuth(
 		newUser.id,
 		newUser.email,
 		newUser.username,
-		newUser.name
+		newUser.name,
+		false
 	);
 	await tryRedisWrite('store refresh token', () =>
 		redis.set(refreshKey(newUser.id), refreshToken, 'EX', REFRESH_TOKEN_SECONDS)
@@ -465,6 +487,12 @@ export async function loginWithOAuth(
 	return {
 		accessToken,
 		refreshToken,
-		user: { id: newUser.id, email: newUser.email, username: newUser.username, name: newUser.name }
+		user: {
+			id: newUser.id,
+			email: newUser.email,
+			username: newUser.username,
+			name: newUser.name,
+			isAdmin: false
+		}
 	};
 }

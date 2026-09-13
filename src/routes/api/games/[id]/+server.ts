@@ -94,12 +94,15 @@ export const DELETE: RequestHandler = async ({ params, request }) => {
 	}
 
 	try {
-		const auth: { userId?: number; creatorToken?: string } = {};
+		const auth: { userId?: number; creatorToken?: string; isAdmin?: boolean } = {};
 
 		const authHeader = request.headers.get('Authorization');
 		if (authHeader?.startsWith('Bearer ')) {
 			const claims = verifyAccessToken(authHeader.slice(7));
-			if (claims) auth.userId = claims.userId;
+			if (claims) {
+				auth.userId = claims.userId;
+				auth.isAdmin = claims.isAdmin;
+			}
 		}
 
 		if (auth.userId === undefined) {
