@@ -4,6 +4,7 @@
 	import './layout.css';
 	import favicon from '$lib/assets/logo.png';
 	import Navbar from '$lib/components/Navbar.svelte';
+	import Footer from '$lib/components/Footer.svelte';
 	import RulesFab from '$lib/components/RulesFab.svelte';
 	import GradientBackground from '$lib/components/ui/gradient-background.svelte';
 
@@ -28,9 +29,12 @@
 <GradientBackground class="min-h-screen">
 	<div class="flex min-h-screen w-full flex-col">
 		<Navbar />
-		{#key `${page.url.pathname}${page.url.search}`}
-			{@render children()}
-		{/key}
+		<div class="flex flex-1 flex-col">
+			{#key `${page.url.pathname}${page.url.search}`}
+				{@render children()}
+			{/key}
+		</div>
+		<Footer />
 	</div>
 	<RulesFab />
 </GradientBackground>
