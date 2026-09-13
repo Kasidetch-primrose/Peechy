@@ -41,29 +41,37 @@
 		{verb} Google
 	</a>
 
-	<a
-		href="/api/auth/oauth/facebook"
-		class="flex items-center justify-center gap-3 rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50 active:bg-gray-100"
+	<div
+		class="flex cursor-not-allowed items-center justify-center gap-3 rounded-lg border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm font-medium text-gray-400"
+		aria-disabled="true"
+		title="เข้าสู่ระบบด้วย Facebook ยังไม่พร้อมใช้งาน อยู่ระหว่างการพัฒนา"
 	>
-		<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24">
+		<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" class="opacity-40">
 			<path
 				fill="#1877F2"
 				d="M24 12.073C24 5.405 18.627 0 12 0S0 5.405 0 12.073C0 18.1 4.388 23.094 10.125 24v-8.437H7.078v-3.49h3.047V9.41c0-3.025 1.792-4.697 4.533-4.697 1.312 0 2.686.235 2.686.235v2.97h-1.513c-1.491 0-1.956.93-1.956 1.886v2.269h3.328l-.532 3.49h-2.796V24C19.612 23.094 24 18.1 24 12.073z"
 			/>
 		</svg>
-		{verb} Facebook
-	</a>
+		<span class="flex flex-col items-start leading-tight">
+			<span>{verb} Facebook</span>
+			<span class="text-[11px] text-gray-400">ยังไม่พร้อมใช้งาน อยู่ระหว่างการพัฒนา</span>
+		</span>
+	</div>
 
-	<a
-		href="/api/auth/oauth/tiktok"
-		class="flex items-center justify-center gap-3 rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50 active:bg-gray-100"
+	<div
+		class="flex cursor-not-allowed items-center justify-center gap-3 rounded-lg border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm font-medium text-gray-400"
+		aria-disabled="true"
+		title="เข้าสู่ระบบด้วย TikTok ยังไม่พร้อมใช้งาน อยู่ระหว่างการพัฒนา"
 	>
-		<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24">
+		<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" class="opacity-40">
 			<path
 				fill="#000000"
 				d="M16.6 5.82s.51.5 0 0A4.278 4.278 0 0 1 15.54 3h-3.09v12.4a2.592 2.592 0 0 1-2.59 2.5c-1.42 0-2.6-1.16-2.6-2.6c0-1.72 1.66-3.01 3.37-2.48V9.66c-3.45-.46-6.47 2.22-6.47 5.64c0 3.33 2.76 5.7 5.69 5.7c3.14 0 5.69-2.55 5.69-5.7V9.01a7.35 7.35 0 0 0 4.3 1.38V7.3s-1.88.09-3.24-1.48z"
 			/>
 		</svg>
-		{verb} TikTok
-	</a>
+		<span class="flex flex-col items-start leading-tight">
+			<span>{verb} TikTok</span>
+			<span class="text-[11px] text-gray-400">ยังไม่พร้อมใช้งาน อยู่ระหว่างการพัฒนา</span>
+		</span>
+	</div>
 </div>
