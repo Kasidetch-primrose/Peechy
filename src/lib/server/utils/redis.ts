@@ -4,9 +4,11 @@ import { env } from '$env/dynamic/private';
 if (!env.REDIS_URL) throw new Error('REDIS_URL is not set');
 
 export const redis = new Redis(env.REDIS_URL, {
-	// Fail fast when Redis is down instead of queueing requests forever.
-	enableOfflineQueue: false,
-	maxRetriesPerRequest: 1,
+	// Queue commands issued before the connection finishes handshaking —
+	// serverless cold starts otherwise throw "Stream isn't writeable" on
+	// the very first request. maxRetriesPerRequest still bounds the wait.
+	enableOfflineQueue: true,
+	maxRetriesPerRequest: 3,
 	retryStrategy(times) {
 		return Math.min(times * 200, 2000);
 	}
