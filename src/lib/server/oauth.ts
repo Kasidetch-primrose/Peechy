@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto';
+import { randomBytes, createHash } from 'node:crypto';
 import { env } from '$env/dynamic/private';
 import { redis } from './utils/redis';
 
@@ -8,19 +8,46 @@ const TICKET_TTL = 60; // 1 minute
 const stateKey = (state: string) => `oauth:state:${state}`;
 const ticketKey = (ticket: string) => `oauth:ticket:${ticket}`;
 
+function requireEnv(name: string): string {
+	const value = env[name];
+	if (!value) throw new Error(`${name} is not set`);
+	return value;
+}
+
 export function generateState(): string {
 	return randomBytes(32).toString('hex');
 }
 
-export async function storeState(state: string, provider: string) {
-	await redis.set(stateKey(state), provider, 'EX', STATE_TTL);
+/** PKCE code_verifier (TikTok requires PKCE on its authorize flow). */
+export function generateCodeVerifier(): string {
+	return randomBytes(32).toString('base64url');
 }
 
-export async function validateState(state: string, provider: string): Promise<boolean> {
+export function toCodeChallenge(codeVerifier: string): string {
+	return createHash('sha256').update(codeVerifier).digest('base64url');
+}
+
+export async function storeState(state: string, provider: string, codeVerifier?: string) {
+	await redis.set(stateKey(state), JSON.stringify({ provider, codeVerifier }), 'EX', STATE_TTL);
+}
+
+export async function validateState(
+	state: string,
+	provider: string
+): Promise<{ valid: boolean; codeVerifier?: string }> {
 	const stored = await redis.get(stateKey(state));
-	if (!stored || stored !== provider) return false;
+	if (!stored) return { valid: false };
+
+	let parsed: { provider: string; codeVerifier?: string };
+	try {
+		parsed = JSON.parse(stored);
+	} catch {
+		return { valid: false };
+	}
+
+	if (parsed.provider !== provider) return { valid: false };
 	await redis.del(stateKey(state));
-	return true;
+	return { valid: true, codeVerifier: parsed.codeVerifier };
 }
 
 export async function createTicket(data: object): Promise<string> {
@@ -42,7 +69,7 @@ export async function consumeTicket(ticket: string): Promise<object | null> {
 
 export function googleAuthUrl(redirectUri: string, state: string): string {
 	const params = new URLSearchParams({
-		client_id: env.GOOGLE_CLIENT_ID,
+		client_id: requireEnv('GOOGLE_CLIENT_ID'),
 		redirect_uri: redirectUri,
 		response_type: 'code',
 		scope: 'openid email profile',
@@ -58,8 +85,8 @@ export async function exchangeGoogleCode(code: string, redirectUri: string) {
 		headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
 		body: new URLSearchParams({
 			code,
-			client_id: env.GOOGLE_CLIENT_ID,
-			client_secret: env.GOOGLE_CLIENT_SECRET,
+			client_id: requireEnv('GOOGLE_CLIENT_ID'),
+			client_secret: requireEnv('GOOGLE_CLIENT_SECRET'),
 			redirect_uri: redirectUri,
 			grant_type: 'authorization_code'
 		})
@@ -82,7 +109,7 @@ export async function fetchGoogleUser(accessToken: string) {
 
 export function facebookAuthUrl(redirectUri: string, state: string): string {
 	const params = new URLSearchParams({
-		client_id: env.FACEBOOK_CLIENT_ID,
+		client_id: requireEnv('FACEBOOK_CLIENT_ID'),
 		redirect_uri: redirectUri,
 		response_type: 'code',
 		scope: 'email,public_profile',
@@ -94,8 +121,8 @@ export function facebookAuthUrl(redirectUri: string, state: string): string {
 export async function exchangeFacebookCode(code: string, redirectUri: string) {
 	const params = new URLSearchParams({
 		code,
-		client_id: env.FACEBOOK_CLIENT_ID,
-		client_secret: env.FACEBOOK_CLIENT_SECRET,
+		client_id: requireEnv('FACEBOOK_CLIENT_ID'),
+		client_secret: requireEnv('FACEBOOK_CLIENT_SECRET'),
 		redirect_uri: redirectUri
 	});
 	const res = await fetch(`https://graph.facebook.com/v19.0/oauth/access_token?${params}`);
@@ -109,4 +136,57 @@ export async function fetchFacebookUser(accessToken: string) {
 	);
 	if (!res.ok) throw new Error('Failed to fetch Facebook user info');
 	return res.json() as Promise<{ id: string; name: string; email?: string }>;
+}
+
+// ---------------------------------------------------------------------------
+// TikTok
+// ---------------------------------------------------------------------------
+
+export function tiktokAuthUrl(redirectUri: string, state: string, codeChallenge: string): string {
+	const params = new URLSearchParams({
+		client_key: requireEnv('TIKTOK_CLIENT_KEY'),
+		redirect_uri: redirectUri,
+		response_type: 'code',
+		scope: 'user.info.basic',
+		state,
+		code_challenge: codeChallenge,
+		code_challenge_method: 'S256'
+	});
+	return `https://www.tiktok.com/v2/auth/authorize/?${params}`;
+}
+
+export async function exchangeTiktokCode(code: string, redirectUri: string, codeVerifier: string) {
+	const res = await fetch('https://open.tiktokapis.com/v2/oauth/token/', {
+		method: 'POST',
+		headers: {
+			'Content-Type': 'application/x-www-form-urlencoded',
+			'Cache-Control': 'no-cache'
+		},
+		body: new URLSearchParams({
+			client_key: requireEnv('TIKTOK_CLIENT_KEY'),
+			client_secret: requireEnv('TIKTOK_CLIENT_SECRET'),
+			code,
+			grant_type: 'authorization_code',
+			redirect_uri: redirectUri,
+			code_verifier: codeVerifier
+		})
+	});
+	if (!res.ok) throw new Error('Failed to exchange TikTok code');
+	const data = (await res.json()) as { access_token?: string; open_id?: string; error?: string };
+	if (!data.access_token) throw new Error(`TikTok token exchange failed: ${data.error ?? 'unknown error'}`);
+	return data as { access_token: string; open_id: string };
+}
+
+export async function fetchTiktokUser(accessToken: string) {
+	const params = new URLSearchParams({ fields: 'open_id,union_id,avatar_url,display_name' });
+	const res = await fetch(`https://open.tiktokapis.com/v2/user/info/?${params}`, {
+		headers: { Authorization: `Bearer ${accessToken}` }
+	});
+	if (!res.ok) throw new Error('Failed to fetch TikTok user info');
+	const body = (await res.json()) as {
+		data?: { user?: { open_id: string; union_id?: string; display_name?: string; avatar_url?: string } };
+		error?: { code: string; message: string };
+	};
+	if (!body.data?.user) throw new Error(`Failed to fetch TikTok user info: ${body.error?.message ?? 'unknown error'}`);
+	return body.data.user;
 }

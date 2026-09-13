@@ -6,6 +6,8 @@ import {
 	fetchGoogleUser,
 	exchangeFacebookCode,
 	fetchFacebookUser,
+	exchangeTiktokCode,
+	fetchTiktokUser,
 	createTicket
 } from '$lib/server/oauth';
 import { loginWithOAuth } from '$lib/server/auth-service';
@@ -19,7 +21,7 @@ export const GET: RequestHandler = async ({ params, url }) => {
 		throw redirect(302, '/auth/login?error=oauth_cancelled');
 	}
 
-	const valid = await validateState(state, provider);
+	const { valid, codeVerifier } = await validateState(state, provider);
 	if (!valid) {
 		throw redirect(302, '/auth/login?error=oauth_invalid_state');
 	}
@@ -43,6 +45,13 @@ export const GET: RequestHandler = async ({ params, url }) => {
 			providerUserId = userInfo.id;
 			email = userInfo.email ?? null;
 			name = userInfo.name;
+		} else if (provider === 'tiktok') {
+			if (!codeVerifier) throw redirect(302, '/auth/login?error=oauth_invalid_state');
+			const tokens = await exchangeTiktokCode(code, redirectUri, codeVerifier);
+			const userInfo = await fetchTiktokUser(tokens.access_token);
+			providerUserId = userInfo.open_id;
+			email = null; // TikTok's Login Kit does not expose email
+			name = userInfo.display_name ?? null;
 		} else {
 			throw redirect(302, '/auth/login?error=unknown_provider');
 		}

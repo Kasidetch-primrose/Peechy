@@ -4,6 +4,7 @@
 	import AuthService from '$lib/data/services/auth';
 	import { authUserStore } from '$lib/data/stores/authUser';
 	import AnimatedLoginCard from '$lib/components/ui/animated-login-card.svelte';
+	import SocialLoginButtons from '$lib/components/ui/social-login-buttons.svelte';
 
 	let email = $state('');
 	let password = $state('');
@@ -15,6 +16,7 @@
 		oauth_cancelled: 'ยกเลิกการเข้าสู่ระบบด้วย Social',
 		oauth_invalid_state: 'เกิดข้อผิดพลาด กรุณาลองใหม่',
 		oauth_failed: 'เข้าสู่ระบบด้วย Social ไม่สำเร็จ กรุณาลองใหม่',
+		unknown_provider: 'ไม่รองรับผู้ให้บริการนี้',
 		no_ticket: 'เกิดข้อผิดพลาด กรุณาลองใหม่'
 	};
 
@@ -63,7 +65,8 @@
 			onsubmit={handleSubmit}
 		/>
 
-		<!-- todo: facebook & google login -->
+		<!-- Social login -->
+		<SocialLoginButtons dividerLabel="หรือเข้าสู่ระบบด้วย" verb="เข้าสู่ระบบด้วย" />
 
 		<!-- Legal links -->
 		<p class="mt-5 text-center text-xs text-gray-400">
