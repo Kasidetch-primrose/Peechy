@@ -23,6 +23,9 @@
 
 <script lang="ts">
 	import { page } from '$app/state';
+	import { goto } from '$app/navigation';
+	import { fade, scale } from 'svelte/transition';
+	import { authUserStore } from '$lib/data/stores/authUser';
 	import {
 		gameCreateStore,
 		loadEditData,
@@ -83,10 +86,17 @@
 	let isDragging = $state(false);
 	let fileInputEl = $state<HTMLInputElement>(null!);
 
+	let showGuestNotice = $state(false);
+	const isLoggedIn = $derived(!!$authUserStore.user);
+
 	$effect(() => {
 		const id = editId;
 		if (id) loadEditData(id);
 		return () => resetGameCreateStore();
+	});
+
+	$effect(() => {
+		if (!isEditMode && !isLoggedIn) showGuestNotice = true;
 	});
 </script>
 
@@ -1029,4 +1039,64 @@
 			</form>
 		</div>
 	</div>
+
+	<!-- Guest notice modal -->
+	{#if showGuestNotice}
+		<div
+			class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
+			role="dialog"
+			aria-modal="true"
+			transition:fade={{ duration: 150 }}
+		>
+			<div
+				class="mx-4 w-full max-w-[26rem] rounded-2xl bg-white p-6 shadow-xl"
+				transition:scale={{ duration: 200, start: 0.92, opacity: 0 }}
+			>
+				<div class="flex items-start justify-between gap-3">
+					<h3 class="text-base font-semibold text-gray-900">ยังไม่ได้เข้าสู่ระบบนะ</h3>
+					<button
+						type="button"
+						onclick={() => (showGuestNotice = false)}
+						aria-label="ปิด"
+						class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 focus-visible:ring-2 focus-visible:ring-focus focus-visible:outline-none"
+					>
+						<svg
+							xmlns="http://www.w3.org/2000/svg"
+							width="18"
+							height="18"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							aria-hidden="true"
+						>
+							<line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+						</svg>
+					</button>
+				</div>
+				<p class="mt-2 text-sm text-gray-500">
+					ไม่สมัครก็สร้างเกมได้ แต่สมัครไว้ จะได้กลับมาดูเกมทีหลังได้ !
+				</p>
+
+				<div class="mt-5 flex gap-3">
+					<button
+						type="button"
+						onclick={() => (showGuestNotice = false)}
+						class="flex-1 rounded-xl border border-gray-200 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
+					>
+						สร้างเกมต่อ
+					</button>
+					<button
+						type="button"
+						onclick={() => goto('/auth/register')}
+						class="flex-1 rounded-xl bg-primary-500 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-400"
+					>
+						สมัครสมาชิก
+					</button>
+				</div>
+			</div>
+		</div>
+	{/if}
 {/if}
