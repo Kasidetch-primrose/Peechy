@@ -4,21 +4,18 @@
 	import AuthService from '$lib/data/services/auth';
 	import { authUserStore } from '$lib/data/stores/authUser';
 	import { connect, joinRoom } from '$lib/data/stores/multiplayer';
+	import { saveGuestName, getGuestId, type PlayerIdentity } from '$lib/utils/guest-identity';
+	import GuestNameModal from '$lib/components/GuestNameModal.svelte';
 
 	let mobileMenuOpen = $state(false);
 	let joinCode = $state('');
 	let joining = $state(false);
+	let showGuestModal = $state(false);
 
-	async function handleJoinRoom() {
+	async function proceedJoin(identity: PlayerIdentity) {
 		const code = joinCode.trim();
-		if (code.length !== 5) return;
-		const user = $authUserStore.user;
-		if (!user) {
-			goto('/auth/login');
-			return;
-		}
 		joining = true;
-		connect(String(user.id), user.username);
+		connect(identity.id, identity.name);
 		const ok = await joinRoom(code);
 		joining = false;
 		if (ok) {
@@ -26,6 +23,23 @@
 			mobileMenuOpen = false;
 			goto(`/game/multiplayer/lobby/${code}`);
 		}
+	}
+
+	async function handleJoinRoom() {
+		const code = joinCode.trim();
+		if (code.length !== 5) return;
+		const user = $authUserStore.user;
+		if (user) {
+			await proceedJoin({ id: String(user.id), name: user.username });
+			return;
+		}
+		// Guests are always prompted for a nickname, even if they've played before.
+		showGuestModal = true;
+	}
+
+	function handleGuestConfirm(name: string) {
+		saveGuestName(name);
+		proceedJoin({ id: getGuestId(), name });
 	}
 
 	const navLinks = [
@@ -273,3 +287,9 @@
 		</div>
 	{/if}
 </header>
+
+<GuestNameModal
+	bind:open={showGuestModal}
+	onConfirm={handleGuestConfirm}
+	onCancel={() => (showGuestModal = false)}
+/>

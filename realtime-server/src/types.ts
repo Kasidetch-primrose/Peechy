@@ -11,6 +11,10 @@ export interface RoomState {
 	currentImageIndex: number;
 	currentTurnPlayerIndex: number;
 	globalRevealedTiles: number[];
+	// Hint ids revealed so far for the current image, in reveal order. Lives
+	// on the room (not the per-player TurnState) because revealing a hint is
+	// shared: it stays visible to every player taking a turn on this image.
+	revealedHintIds: number[];
 	createdAt: number;
 }
 
@@ -27,14 +31,19 @@ export interface TurnState {
 	startedAt: number;
 	tileOpened: boolean;
 	guessAttempts: 0 | 1 | 2;
-	hintUsed: boolean;
+}
+
+export interface ImageHint {
+	id: number;
+	hint: string;
+	orderIndex: number;
 }
 
 export interface ImageData {
 	id: number;
 	imageUrl: string;
 	answer: string;
-	hint: string | null;
+	hints: ImageHint[]; // sorted by orderIndex ascending
 	gridSize: number;
 	maxReveal: number | null;
 }

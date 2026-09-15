@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { get } from 'svelte/store';
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
 	import { authUserStore } from '$lib/data/stores/authUser';
@@ -12,7 +13,7 @@
 	} from '$lib/data/stores/multiplayer';
 
 	const code = $derived(page.params.code ?? '');
-	const selfId = $derived(String($authUserStore.user?.id ?? ''));
+	const selfId = $derived($multiplayerStore.selfId);
 	const isMyTurn = $derived($multiplayerStore.currentTurnPlayerId === selfId);
 
 	let guessInput = $state('');
@@ -35,10 +36,18 @@
 
 	function handleHintToggle() {
 		hintOpen = !hintOpen;
-		if (hintOpen && isMyTurn && !$multiplayerStore.hintRequested) {
-			useHint();
-		}
 	}
+
+	function handleRevealHint() {
+		if (!isMyTurn) return;
+		useHint();
+	}
+
+	const hintPenalty = $derived.by(() => {
+		const image = $multiplayerStore.currentImage;
+		if (!image) return 0;
+		return Math.round(100 / (image.gridSize * image.gridSize));
+	});
 
 	// Track container size and natural image dimensions to align the tile
 	// grid to the actually-rendered (object-contain) image rect, same as singleplayer.
@@ -83,12 +92,19 @@
 	});
 
 	$effect(() => {
-		if (!$authUserStore.user) {
-			goto('/auth/login');
+		// Already connected (the normal path — arrived here from the lobby).
+		if (get(multiplayerStore).selfId) return;
+
+		const user = $authUserStore.user;
+		if (user) {
+			connect(String(user.id), user.username);
 			return;
 		}
-		const user = $authUserStore.user;
-		connect(String(user.id), user.username);
+
+		// Guest with no active session (e.g. hard refresh mid-game) — the
+		// lobby handles reconnecting/prompting, and will bounce straight
+		// back here once the room's status comes back as "playing".
+		goto(`/game/multiplayer/lobby/${code}`);
 	});
 
 	// Drive the countdown locally off the server-authoritative startedAt.
@@ -214,14 +230,33 @@
 							<span class="text-xs font-semibold tracking-wide text-gray-500 uppercase">คำใบ้</span>
 						</div>
 						<div class="px-4 py-4">
-							{#if !isMyTurn && !$multiplayerStore.hintRequested}
-								<p class="text-center text-sm text-gray-400">รอตาคุณเพื่อเปิดคำใบ้</p>
-							{:else if !$multiplayerStore.hintRequested}
-								<p class="text-center text-sm text-gray-400">กำลังขอคำใบ้...</p>
-							{:else if $multiplayerStore.hint}
-								<p class="text-sm leading-relaxed text-gray-700">💡 {$multiplayerStore.hint}</p>
-							{:else}
+							{#if !$multiplayerStore.currentImage || $multiplayerStore.currentImage.hintCount === 0}
 								<p class="text-center text-sm text-gray-400">ไม่มีคำใบ้สำหรับรูปนี้</p>
+							{:else}
+								<ul class="flex flex-col gap-2">
+									{#each Array($multiplayerStore.currentImage.hintCount) as _, i (i)}
+										{@const revealed = $multiplayerStore.revealedHints.find((h) => h.orderIndex === i)}
+										{@const isNext = i === $multiplayerStore.revealedHints.length}
+										<li>
+											{#if revealed}
+												<p class="text-sm leading-relaxed text-gray-700">💡 {revealed.hint}</p>
+											{:else if isNext && isMyTurn}
+												<button
+													type="button"
+													onclick={handleRevealHint}
+													class="flex w-full items-center justify-between rounded-lg border border-warning/30 bg-warning/5 px-3 py-2 text-sm font-medium text-warning transition-colors hover:bg-warning/10"
+												>
+													<span>🔒 เปิดคำใบ้ #{i + 1}</span>
+													<span class="text-xs">-{hintPenalty} คะแนน</span>
+												</button>
+											{:else if isNext}
+												<p class="text-center text-sm text-gray-400">รอตาคุณเพื่อเปิดคำใบ้ #{i + 1}</p>
+											{:else}
+												<p class="rounded-lg bg-gray-50 px-3 py-2 text-sm text-gray-300">🔒 คำใบ้ #{i + 1}</p>
+											{/if}
+										</li>
+									{/each}
+								</ul>
 							{/if}
 						</div>
 					</div>
