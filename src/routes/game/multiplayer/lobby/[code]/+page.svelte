@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { get } from 'svelte/store';
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
 	import { authUserStore } from '$lib/data/stores/authUser';
@@ -9,10 +10,14 @@
 		startGame,
 		leaveRoom
 	} from '$lib/data/stores/multiplayer';
+	import { getGuestId, saveGuestName } from '$lib/utils/guest-identity';
+	import GuestNameModal from '$lib/components/GuestNameModal.svelte';
 
 	const code = $derived(page.params.code ?? '');
-	const selfId = $derived(String($authUserStore.user?.id ?? ''));
+	const selfId = $derived($multiplayerStore.selfId);
 	const isHost = $derived($multiplayerStore.room?.hostId === selfId);
+
+	let showGuestModal = $state(false);
 
 	// Tracks which room code we've already issued a join for, so this effect
 	// only fires once per code. It deliberately does NOT read $multiplayerStore
@@ -22,17 +27,39 @@
 	let joinedCode = $state('');
 
 	$effect(() => {
-		if (!$authUserStore.user) {
-			goto('/auth/login');
+		if (joinedCode === code) return;
+
+		// Already connected this session (e.g. just confirmed a nickname on
+		// the navbar/create-room flow seconds ago) — reuse that connection
+		// instead of prompting again. Read via get() (not $multiplayerStore)
+		// so this effect isn't re-triggered by every store write joinRoom()
+		// makes — see the joinedCode comment above.
+		if (get(multiplayerStore).selfId) {
+			joinedCode = code;
+			joinRoom(code);
 			return;
 		}
-		if (joinedCode === code) return;
-		joinedCode = code;
 
 		const user = $authUserStore.user;
-		connect(String(user.id), user.username);
-		joinRoom(code);
+		if (user) {
+			joinedCode = code;
+			connect(String(user.id), user.username);
+			joinRoom(code);
+			return;
+		}
+
+		// Guests always get prompted for a nickname when landing here fresh
+		// (e.g. opening a shared invite link directly).
+		showGuestModal = true;
 	});
+
+	function handleGuestConfirm(name: string) {
+		saveGuestName(name);
+		showGuestModal = false;
+		joinedCode = code;
+		connect(getGuestId(), name);
+		joinRoom(code);
+	}
 
 	$effect(() => {
 		if ($multiplayerStore.room?.status === 'playing') {
@@ -112,3 +139,9 @@
 	</div>
 </div>
 {/if}
+
+<GuestNameModal
+	bind:open={showGuestModal}
+	onConfirm={handleGuestConfirm}
+	onCancel={() => goto('/')}
+/>

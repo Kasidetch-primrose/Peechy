@@ -27,6 +27,13 @@ export interface IPublicImage {
 	imageUrl: string;
 	gridSize: number;
 	maxReveal: number | null;
+	hintCount: number;
+}
+
+export interface IRevealedHint {
+	id: number;
+	hint: string;
+	orderIndex: number;
 }
 
 export interface IGuessBubble {

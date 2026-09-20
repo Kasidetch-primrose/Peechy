@@ -12,15 +12,19 @@ export async function getGameImages(gameId: number): Promise<ImageData[]> {
 			id: number;
 			image_url: string;
 			answer: string;
-			hint: string | null;
+			hints: { id: number; hint: string; orderIndex: number }[];
 			grid_size: number;
 			max_reveal: number | null;
 		}[]
 	>`
-		select i.id, i.image_url, i.answer, h.hint, i.grid_size, i.max_reveal
+		select i.id, i.image_url, i.answer, i.grid_size, i.max_reveal,
+			coalesce(h.hints, '[]'::json) as hints
 		from images i
 		left join lateral (
-			select string_agg(ih.hint, ' / ') as hint
+			select json_agg(
+				json_build_object('id', ih.id, 'hint', ih.hint, 'orderIndex', ih.order_index)
+				order by ih.order_index asc
+			) as hints
 			from image_hints ih
 			where ih.image_id = i.id and ih.deleted_at is null
 		) h on true
@@ -31,7 +35,7 @@ export async function getGameImages(gameId: number): Promise<ImageData[]> {
 		id: row.id,
 		imageUrl: row.image_url,
 		answer: row.answer,
-		hint: row.hint,
+		hints: row.hints,
 		gridSize: row.grid_size,
 		maxReveal: row.max_reveal
 	}));
