@@ -310,33 +310,74 @@
 		rafHandle = requestAnimationFrame(flushPending);
 	}
 
+	// Two-finger gestures belong to the browser (pinch-zoom / pan, allowed by
+	// touch-action: pinch-zoom on the canvas). Track fingers so a second touch
+	// never draws and cancels whatever the first finger had just started.
+	const touchPointers = new Set<number>();
+	let pendingFill: { pointerId: number; point: IPoint } | null = null;
+
+	// crypto.randomUUID() only exists in secure contexts (HTTPS/localhost),
+	// so it's undefined for a phone opening the dev server over http://<LAN-IP>.
+	function newStrokeId(): string {
+		return `${selfId}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+	}
+
+	// A second finger landed (or the browser cancelled the pointer): throw away
+	// the in-progress stroke. The server's undo drops this player's latest
+	// stroke, which is exactly that one, and tells everyone else to drop it too.
+	function abortForMultiTouch() {
+		pendingFill = null;
+		cursor.visible = false;
+		if (!activeStrokeId) return;
+		lastPoint.delete(activeStrokeId);
+		activeStrokeId = null;
+		activeStroke = null;
+		pendingPoints = [];
+		DrawingService.undo(code);
+	}
+
+	function commitFill(point: IPoint) {
+		const strokeId = newStrokeId();
+		const fillStroke: IStroke = {
+			id: strokeId,
+			playerId: selfId,
+			color,
+			width: 0,
+			fill: true,
+			points: [point]
+		};
+		allStrokes = [...allStrokes, fillStroke];
+		syncCanUndo();
+		applyFill(toPixelPoint(point), color);
+		DrawingService.strokeStart(code, fillStroke);
+		DrawingService.strokeEnd(code, strokeId);
+	}
+
 	function handlePointerDown(e: PointerEvent) {
 		if (e.button !== 0 && e.pointerType === 'mouse') return;
+
+		if (e.pointerType === 'touch') {
+			// The first finger of a gesture is "primary"; use it to drop any stale ids.
+			if (e.isPrimary) touchPointers.clear();
+			touchPointers.add(e.pointerId);
+			if (touchPointers.size > 1) {
+				abortForMultiTouch();
+				return;
+			}
+		}
 		updateCursor(e);
 
 		const point = toNormalizedPoint(e.clientX, e.clientY);
-		// crypto.randomUUID() only exists in secure contexts (HTTPS/localhost),
-		// so it's undefined for a phone opening the dev server over http://<LAN-IP>.
-		const strokeId = `${selfId}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+		canvasEl.setPointerCapture(e.pointerId);
 
+		// Bucket fills on release, so a pinch that starts with the bucket
+		// tool never leaves a fill behind.
 		if (tool === 'bucket') {
-			const fillStroke: IStroke = {
-				id: strokeId,
-				playerId: selfId,
-				color,
-				width: 0,
-				fill: true,
-				points: [point]
-			};
-			allStrokes = [...allStrokes, fillStroke];
-			syncCanUndo();
-			applyFill(toPixelPoint(point), color);
-			DrawingService.strokeStart(code, fillStroke);
-			DrawingService.strokeEnd(code, strokeId);
+			pendingFill = { pointerId: e.pointerId, point };
 			return;
 		}
 
-		canvasEl.setPointerCapture(e.pointerId);
+		const strokeId = newStrokeId();
 		const erasing = tool === 'eraser';
 		const stroke: IStroke = {
 			id: strokeId,
@@ -384,11 +425,26 @@
 
 	// A finger has no hover state, so its ring only shows while touching.
 	function handlePointerEnd(e: PointerEvent) {
+		if (e.pointerType === 'touch') touchPointers.delete(e.pointerId);
+
+		// The browser cancels the pointer when it takes the touch over (pinch
+		// zoom, system gesture): treat whatever was in progress as abandoned.
+		if (e.type === 'pointercancel') {
+			abortForMultiTouch();
+			return;
+		}
+
+		if (pendingFill?.pointerId === e.pointerId) {
+			commitFill(pendingFill.point);
+			pendingFill = null;
+		}
+
 		handlePointerUp();
 		if (e.pointerType === 'touch') cursor.visible = false;
 	}
 
-	function handlePointerLeave() {
+	function handlePointerLeave(e: PointerEvent) {
+		if (e.pointerType === 'touch') touchPointers.delete(e.pointerId);
 		handlePointerUp();
 		cursor.visible = false;
 	}
@@ -470,7 +526,7 @@
 	});
 </script>
 
-<div bind:this={containerEl} class="absolute inset-2 flex touch-none items-center justify-center">
+<div bind:this={containerEl} class="absolute inset-2 flex items-center justify-center">
 	<div
 		class="relative overflow-hidden rounded-xl border border-primary-200 bg-white shadow-md"
 		style="width: {paperSize.width}px; height: {paperSize.height}px;"
@@ -478,7 +534,7 @@
 		<canvas
 			bind:this={canvasEl}
 			class="block h-full w-full cursor-none select-none"
-			style="touch-action: none; -webkit-touch-callout: none; -webkit-user-select: none;"
+			style="touch-action: pinch-zoom; -webkit-touch-callout: none; -webkit-user-select: none;"
 			oncontextmenu={(e) => e.preventDefault()}
 			onpointerdown={handlePointerDown}
 			onpointermove={handlePointerMove}

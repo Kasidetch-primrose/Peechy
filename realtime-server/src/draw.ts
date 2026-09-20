@@ -8,6 +8,19 @@ import { DRAW_RATIOS, type DrawPlayer, type DrawRatio, type DrawRoomState, type 
 const roomStrokes = new Map<string, Stroke[]>();
 const MAX_STROKES_PER_ROOM = 3000;
 
+// Rooms live in Redis (survive a server restart) but this map doesn't, so a
+// room can exist with no entry here. Always go through this instead of
+// assuming createRoom() ran in this process — otherwise strokes are silently
+// dropped and undo/clear do nothing after a restart.
+function strokesFor(code: string): Stroke[] {
+	let strokes = roomStrokes.get(code);
+	if (!strokes) {
+		strokes = [];
+		roomStrokes.set(code, strokes);
+	}
+	return strokes;
+}
+
 export async function createRoom(
 	hostId: string,
 	ratio: unknown
@@ -38,7 +51,7 @@ export async function joinRoom(
 	await rooms.addPlayer(code, player);
 
 	const players = await rooms.getAllPlayers(code);
-	const strokes = roomStrokes.get(code) ?? [];
+	const strokes = strokesFor(code);
 	return { room, players, strokes };
 }
 
@@ -49,8 +62,7 @@ export async function leaveRoom(io: Server, code: string, playerId: string): Pro
 }
 
 export function startStroke(code: string, stroke: Stroke): void {
-	const strokes = roomStrokes.get(code);
-	if (!strokes) return;
+	const strokes = strokesFor(code);
 	strokes.push(stroke);
 	if (strokes.length > MAX_STROKES_PER_ROOM) strokes.shift();
 }
@@ -77,7 +89,7 @@ export function undoLastStroke(code: string, playerId: string): string | null {
 }
 
 function clearRoom(code: string): void {
-	if (roomStrokes.has(code)) roomStrokes.set(code, []);
+	roomStrokes.set(code, []);
 }
 
 // ── Clear-canvas vote ─────────────────────────────────────────────────────
@@ -131,8 +143,6 @@ function allYes(vote: ClearVote): boolean {
 }
 
 export async function requestClear(io: Server, code: string, playerId: string): Promise<void> {
-	if (!roomStrokes.has(code)) return;
-
 	// Tell the requester (all their tabs) why nothing happened instead of
 	// dropping the request silently.
 	const deny = (reason: 'busy' | 'cooldown', retryAt?: number): void => {
