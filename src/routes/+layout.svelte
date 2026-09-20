@@ -34,7 +34,9 @@
 				{@render children()}
 			{/key}
 		</div>
-		<Footer />
+		{#if page.url.pathname === '/'}
+			<Footer />
+		{/if}
 	</div>
 	<RulesFab />
 </GradientBackground>
