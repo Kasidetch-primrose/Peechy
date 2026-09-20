@@ -23,6 +23,16 @@
 		if ($drawingStore.clearVote) showClearConfirm = false;
 	});
 
+	// The navbar's height varies with screen width / login state, so measure it.
+	let navHeight = $state(52);
+	$effect(() => {
+		const header = document.querySelector('header');
+		if (!header) return;
+		const observer = new ResizeObserver(() => (navHeight = Math.round(header.getBoundingClientRect().height)));
+		observer.observe(header);
+		return () => observer.disconnect();
+	});
+
 	let now = $state(Date.now());
 	$effect(() => {
 		const ticker = setInterval(() => (now = Date.now()), 500);
@@ -160,7 +170,12 @@
 		<a href="/game/draw" class="text-sm font-medium text-primary-500 hover:underline">กลับไปหน้าห้องวาดรูป</a>
 	</div>
 {:else}
-	<div class="flex min-h-screen flex-col gap-4 bg-linear-to-br from-primary-100/40 via-white to-primary-100/20 p-4">
+	<!-- One screen tall (viewport minus the measured navbar height) so the tool bar never
+	     scrolls out of view. The min-h is only a fallback for very short windows. -->
+	<div
+		class="flex min-h-[26rem] flex-col gap-2 bg-linear-to-br from-primary-100/40 via-white to-primary-100/20 p-2 sm:p-3"
+		style="height: calc(100dvh - {navHeight}px);"
+	>
 		<div class="flex flex-wrap items-center justify-between gap-3">
 			<div class="flex items-center gap-2">
 				<span class="text-xs font-medium text-gray-400">รหัสห้อง</span>
@@ -168,7 +183,7 @@
 					type="button"
 					onclick={copyCode}
 					title="คัดลอกรหัสห้อง"
-					class="rounded-full bg-white/80 px-4 py-1.5 text-lg font-bold tracking-widest text-primary-500 shadow-sm"
+					class="rounded-full bg-white/80 px-3 py-0.5 text-base font-bold tracking-widest text-primary-500 shadow-sm"
 				>
 					{code}
 				</button>
@@ -201,7 +216,7 @@
 					onclick={handleUndo}
 					disabled={!canUndo}
 					title="ย้อนกลับเส้นล่าสุดของคุณ (Ctrl+Z)"
-					class="rounded-full border border-gray-200 px-4 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+					class="rounded-full border border-gray-200 px-3 py-1 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
 				>
 					↶ ย้อนกลับ
 				</button>
@@ -209,21 +224,21 @@
 					type="button"
 					onclick={() => (showClearConfirm = true)}
 					disabled={!!$drawingStore.clearVote || cooldownSeconds > 0}
-					class="rounded-full border border-gray-200 px-4 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+					class="rounded-full border border-gray-200 px-3 py-1 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
 				>
 					ล้างกระดาษ{cooldownSeconds > 0 && !$drawingStore.clearVote ? ` (${cooldownSeconds})` : ''}
 				</button>
 				<button
 					type="button"
 					onclick={handleLeave}
-					class="rounded-full border border-red-200 px-4 py-1.5 text-xs font-medium text-red-500 transition-colors hover:bg-red-50"
+					class="rounded-full border border-red-200 px-3 py-1 text-xs font-medium text-red-500 transition-colors hover:bg-red-50"
 				>
 					ออกจากห้อง
 				</button>
 			</div>
 		</div>
 
-		<div class="relative min-h-[16rem] min-w-0 flex-1 overflow-hidden rounded-2xl border border-primary-100 bg-primary-100/30 shadow-sm">
+		<div class="relative min-h-[8rem] min-w-0 flex-1 overflow-hidden rounded-2xl border border-primary-100 bg-primary-100/30 shadow-sm">
 			{#if $drawingStore.room}
 				<DrawCanvas
 					{code}
@@ -239,7 +254,7 @@
 			{/if}
 		</div>
 
-		<div class="flex flex-wrap items-center justify-center gap-4 rounded-2xl border border-primary-100 bg-white/80 px-4 py-3 shadow-sm">
+		<div class="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 rounded-2xl border border-primary-100 bg-white/80 px-3 py-2 shadow-sm">
 			<div class="flex items-center gap-1 rounded-full bg-gray-100 p-1" role="radiogroup" aria-label="เครื่องมือ">
 				<button
 					type="button"

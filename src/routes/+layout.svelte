@@ -38,5 +38,7 @@
 			<Footer />
 		{/if}
 	</div>
-	<RulesFab />
+	{#if !page.url.pathname.startsWith('/game/draw')}
+		<RulesFab />
+	{/if}
 </GradientBackground>
