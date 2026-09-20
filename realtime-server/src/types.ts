@@ -40,3 +40,36 @@ export interface ImageData {
 }
 
 export type GuessOutcome = 'wrong' | 'close' | 'correct';
+
+// ── Draw Together ─────────────────────────────────────────────────────────
+
+export interface DrawPlayer {
+	id: string;
+	name: string;
+	connected: boolean;
+	joinedAt: number;
+}
+
+export const DRAW_RATIOS = ['4:3', '16:9', '1:1', '3:4'] as const;
+export type DrawRatio = (typeof DRAW_RATIOS)[number];
+
+export interface DrawRoomState {
+	code: string;
+	hostId: string;
+	ratio: DrawRatio;
+	createdAt: number;
+}
+
+export interface Point {
+	x: number;
+	y: number;
+}
+
+export interface Stroke {
+	id: string;
+	playerId: string;
+	color: string;
+	width: number;
+	erase?: boolean;
+	points: Point[];
+}

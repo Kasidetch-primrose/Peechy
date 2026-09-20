@@ -3,7 +3,8 @@ import { createServer } from 'http';
 import { Server } from 'socket.io';
 import * as rooms from './roomManager.js';
 import * as game from './game.js';
-import type { Player } from './types.js';
+import * as draw from './draw.js';
+import type { Player, Stroke } from './types.js';
 
 const PORT = Number(process.env.PORT ?? 4001);
 const CORS_ORIGIN = (process.env.CORS_ORIGIN ?? 'http://localhost:5173')
@@ -99,10 +100,66 @@ io.on('connection', (socket) => {
 		await game.useHint(io, code, playerId);
 	});
 
+	// ── Draw Together ────────────────────────────────────────────────────
+	socket.on('draw:room:create', async (payload, callback) => {
+		try {
+			const { code } = await draw.createRoom(playerId, payload?.ratio);
+			socket.join(`draw:${code}`);
+			callback?.({ ok: true, code });
+		} catch (e) {
+			callback?.({ ok: false, message: (e as Error).message });
+		}
+	});
+
+	socket.on('draw:room:join', async ({ code }, callback) => {
+		try {
+			const result = await draw.joinRoom(code, playerId, playerName);
+			if (!result) return callback?.({ ok: false, message: 'ไม่พบห้องนี้' });
+
+			socket.join(`draw:${code}`);
+			const player = result.players.find((p) => p.id === playerId);
+			if (player) io.to(`draw:${code}`).emit('draw:room:playerJoined', { player });
+			callback?.({ ok: true, room: result.room, players: result.players, strokes: result.strokes });
+		} catch (e) {
+			callback?.({ ok: false, message: (e as Error).message });
+		}
+	});
+
+	socket.on('draw:room:leave', async ({ code }) => {
+		await draw.leaveRoom(io, code, playerId);
+		socket.leave(`draw:${code}`);
+	});
+
+	socket.on('draw:stroke:start', ({ code, stroke }: { code: string; stroke: Stroke }) => {
+		draw.startStroke(code, stroke);
+		socket.to(`draw:${code}`).emit('draw:stroke:start', { stroke });
+	});
+
+	socket.on(
+		'draw:stroke:points',
+		({ code, strokeId, points }: { code: string; strokeId: string; points: Stroke['points'] }) => {
+			draw.appendPoints(code, strokeId, points);
+			socket.to(`draw:${code}`).emit('draw:stroke:points', { strokeId, points });
+		}
+	);
+
+	socket.on('draw:stroke:end', ({ code, strokeId }: { code: string; strokeId: string }) => {
+		socket.to(`draw:${code}`).emit('draw:stroke:end', { strokeId });
+	});
+
+	socket.on('draw:clear', ({ code }: { code: string }) => {
+		draw.clearRoom(code);
+		io.to(`draw:${code}`).emit('draw:cleared');
+	});
+
 	socket.on('disconnect', async () => {
 		for (const room of socket.rooms) {
 			if (room === socket.id) continue;
-			await game.handleDisconnect(io, room, playerId);
+			if (room.startsWith('draw:')) {
+				await draw.handleDisconnect(io, room.slice('draw:'.length), playerId);
+			} else {
+				await game.handleDisconnect(io, room, playerId);
+			}
 		}
 	});
 });
