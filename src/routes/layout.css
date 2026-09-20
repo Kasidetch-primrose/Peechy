@@ -184,6 +184,21 @@
 	outline-offset: 2px;
 }
 
+/* ── Turn off text selection for the whole document (used by the drawing room,
+ *    where rapid taps would otherwise select text / show the iOS loupe).
+ *    Form fields stay selectable/typable — iOS can't type into `user-select: none`
+ *    inputs. Toggle by adding the `no-text-select` class to <body>. ────────────── */
+@utility no-text-select {
+	-webkit-user-select: none;
+	user-select: none;
+	-webkit-touch-callout: none;
+	& input,
+	& textarea {
+		-webkit-user-select: text;
+		user-select: text;
+	}
+}
+
 /* ── Global page background — warm peach → cream → cool mint ────────────────── */
 html,
 body {

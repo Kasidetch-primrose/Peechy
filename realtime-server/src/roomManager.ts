@@ -44,6 +44,7 @@ export async function createRoom(params: {
 		currentImageIndex: 0,
 		currentTurnPlayerIndex: 0,
 		globalRevealedTiles: [],
+		revealedHintIds: [],
 		createdAt: Date.now()
 	};
 	await redis.hset(roomKey(params.code), serialize(state));
@@ -131,8 +132,8 @@ const NUMERIC_FIELDS = new Set([
 	'startedAt',
 	'guessAttempts'
 ]);
-const BOOLEAN_FIELDS = new Set(['tileOpened', 'hintUsed']);
-const JSON_FIELDS = new Set(['globalRevealedTiles']);
+const BOOLEAN_FIELDS = new Set(['tileOpened']);
+const JSON_FIELDS = new Set(['globalRevealedTiles', 'revealedHintIds']);
 
 function deserialize(raw: Record<string, string>): Record<string, unknown> {
 	const out: Record<string, unknown> = {};

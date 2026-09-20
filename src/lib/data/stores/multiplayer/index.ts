@@ -5,6 +5,7 @@ import type {
 	IMultiplayerRoom,
 	IPublicImage,
 	IGuessBubble,
+	IRevealedHint,
 	TurnDuration
 } from '$lib/data/interface/multiplayer';
 
@@ -24,8 +25,7 @@ interface MultiplayerState {
 	turnStartedAt: number | null;
 
 	bubbles: IGuessBubble[]; // recent guesses, auto-expire from UI after a few seconds
-	hint: string | null;
-	hintRequested: boolean; // true once the current player has asked for this turn's hint
+	revealedHints: IRevealedHint[]; // hints opened so far for the current image, shared by everyone
 	revealedAnswer: string | null; // shown briefly when an image round ends
 
 	// Between-round break state: 'answer' shows the full solved image,
@@ -52,8 +52,7 @@ const initial: MultiplayerState = {
 	turnDurationSec: 30,
 	turnStartedAt: null,
 	bubbles: [],
-	hint: null,
-	hintRequested: false,
+	revealedHints: [],
 	revealedAnswer: null,
 	roundPhase: 'none',
 	roundBreakSec: 0,
@@ -169,7 +168,8 @@ function _bindEvents() {
 			...s,
 			room: s.room ? { ...s.room, status: 'playing' } : s.room,
 			currentImage: image,
-			revealedTiles: []
+			revealedTiles: [],
+			revealedHints: []
 		}));
 	});
 
@@ -189,8 +189,6 @@ function _bindEvents() {
 				currentTurnPlayerId: playerId,
 				turnDurationSec,
 				turnStartedAt: startedAt,
-				hint: null,
-				hintRequested: false,
 				revealedAnswer: null,
 				roundPhase: 'none',
 				roundBreakStartedAt: null,
@@ -227,9 +225,28 @@ function _bindEvents() {
 		}
 	);
 
-	socket.on('turn:hintUsed', ({ hint }: { playerId: string; hint: string | null }) => {
-		multiplayerStore.update((s) => ({ ...s, hint, hintRequested: true }));
-	});
+	socket.on(
+		'turn:hintUsed',
+		({
+			hintId,
+			hint,
+			orderIndex,
+			scores
+		}: {
+			playerId: string;
+			hintId: number;
+			hint: string;
+			orderIndex: number;
+			penalty: number;
+			scores: Record<string, number>;
+		}) => {
+			multiplayerStore.update((s) => ({
+				...s,
+				revealedHints: [...s.revealedHints, { id: hintId, hint, orderIndex }],
+				players: s.players.map((p) => ({ ...p, score: scores[p.id] ?? p.score }))
+			}));
+		}
+	);
 
 	socket.on(
 		'round:revealAnswer',
@@ -283,6 +300,7 @@ function _bindEvents() {
 				...s,
 				currentImage: image,
 				revealedTiles: [],
+				revealedHints: [],
 				players: s.players.map((p) => ({ ...p, score: scores[p.id] ?? p.score })),
 				room: s.room ? { ...s.room, currentImageIndex: imageIndex } : s.room
 			}));

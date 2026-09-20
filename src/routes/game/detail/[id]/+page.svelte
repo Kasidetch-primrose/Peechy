@@ -13,6 +13,8 @@
 	import { authUserStore } from '$lib/data/stores/authUser';
 	import { connect, createRoom } from '$lib/data/stores/multiplayer';
 	import type { TurnDuration } from '$lib/data/interface/multiplayer';
+	import { saveGuestName, getGuestId, type PlayerIdentity } from '$lib/utils/guest-identity';
+	import GuestNameModal from '$lib/components/GuestNameModal.svelte';
 
 	let confirmDelete = $state(false);
 	let deleting = $state(false);
@@ -22,17 +24,14 @@
 	let turnDuration = $state<TurnDuration>(30);
 	let creatingRoom = $state(false);
 	let createRoomError = $state('');
+	let showGuestModal = $state(false);
 
-	async function handleCreateRoom() {
-		const user = $authUserStore.user;
+	async function proceedCreateRoom(identity: PlayerIdentity) {
 		const id = $gameDetailStore.game?.id;
-		if (!user || !id) {
-			goto('/auth/login');
-			return;
-		}
+		if (!id) return;
 		creatingRoom = true;
 		createRoomError = '';
-		connect(String(user.id), user.username);
+		connect(identity.id, identity.name);
 		const code = await createRoom(id, turnDuration);
 		creatingRoom = false;
 		if (!code) {
@@ -40,6 +39,21 @@
 			return;
 		}
 		goto(`/game/multiplayer/lobby/${code}`);
+	}
+
+	async function handleCreateRoom() {
+		const user = $authUserStore.user;
+		if (user) {
+			await proceedCreateRoom({ id: String(user.id), name: user.username });
+			return;
+		}
+		// Guests are always prompted for a nickname, even if they've played before.
+		showGuestModal = true;
+	}
+
+	function handleGuestConfirm(name: string) {
+		saveGuestName(name);
+		proceedCreateRoom({ id: getGuestId(), name });
 	}
 
 	async function handleDelete() {
@@ -450,3 +464,9 @@
 		</div>
 	</div>
 {/if}
+
+<GuestNameModal
+	bind:open={showGuestModal}
+	onConfirm={handleGuestConfirm}
+	onCancel={() => (showGuestModal = false)}
+/>

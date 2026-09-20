@@ -41,7 +41,8 @@ export async function startGame(io: Server, code: string): Promise<void> {
 		status: 'playing',
 		currentImageIndex: 0,
 		currentTurnPlayerIndex: 0,
-		globalRevealedTiles: []
+		globalRevealedTiles: [],
+		revealedHintIds: []
 	});
 
 	io.to(code).emit('game:started', {
@@ -53,13 +54,19 @@ export async function startGame(io: Server, code: string): Promise<void> {
 }
 
 function publicImage(image: ImageData) {
-	// Never send the answer to clients.
+	// Never send the answer, or unrevealed hint text, to clients — only the
+	// count, so the UI can render the right number of locked hint slots.
 	return {
 		id: image.id,
 		imageUrl: image.imageUrl,
 		gridSize: image.gridSize,
-		maxReveal: image.maxReveal
+		maxReveal: image.maxReveal,
+		hintCount: image.hints.length
 	};
+}
+
+function hintPenalty(image: ImageData): number {
+	return Math.round(100 / (image.gridSize * image.gridSize));
 }
 
 async function startTurn(io: Server, code: string): Promise<void> {
@@ -74,8 +81,7 @@ async function startTurn(io: Server, code: string): Promise<void> {
 		playerId,
 		startedAt: Date.now(),
 		tileOpened: false,
-		guessAttempts: 0,
-		hintUsed: false
+		guessAttempts: 0
 	};
 	await rooms.setTurn(code, turn);
 
@@ -148,12 +154,34 @@ export async function submitGuess(
 export async function useHint(io: Server, code: string, playerId: string): Promise<void> {
 	const { room, turn, image } = await loadActiveTurnContext(code, playerId);
 	if (!room || !turn || !image) return;
-	if (turn.hintUsed) return;
 
-	const updatedTurn = { ...turn, hintUsed: true };
-	await rooms.setTurn(code, updatedTurn);
+	// Hints reveal in order, one at a time, shared for the whole image — the
+	// next one to reveal is always whichever comes right after however many
+	// are already open.
+	const nextIndex = room.revealedHintIds.length;
+	if (nextIndex >= image.hints.length) return;
+	const hint = image.hints[nextIndex];
 
-	io.to(code).emit('turn:hintUsed', { playerId, hint: image.hint });
+	const penalty = hintPenalty(image);
+	const player = await rooms.getPlayer(code, playerId);
+	if (player) {
+		player.score = Math.max(0, player.score - penalty);
+		await rooms.setPlayer(code, player);
+	}
+
+	await rooms.updateRoom(code, { revealedHintIds: [...room.revealedHintIds, hint.id] });
+
+	const players = await rooms.getAllPlayers(code);
+	const scores = Object.fromEntries(players.map((p) => [p.id, p.score]));
+
+	io.to(code).emit('turn:hintUsed', {
+		playerId,
+		hintId: hint.id,
+		hint: hint.hint,
+		orderIndex: hint.orderIndex,
+		penalty,
+		scores
+	});
 }
 
 async function handleTurnTimeout(io: Server, code: string): Promise<void> {
@@ -290,7 +318,8 @@ async function proceedAfterReveal(
 	await rooms.updateRoom(code, {
 		currentImageIndex: nextIndex,
 		currentTurnPlayerIndex: nextTurnIndex,
-		globalRevealedTiles: []
+		globalRevealedTiles: [],
+		revealedHintIds: []
 	});
 
 	io.to(code).emit('round:prepare', { nextPlayerId, breakSec: PREPARE_BREAK_SEC });

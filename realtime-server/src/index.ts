@@ -3,7 +3,8 @@ import { createServer } from 'http';
 import { Server } from 'socket.io';
 import * as rooms from './roomManager.js';
 import * as game from './game.js';
-import type { Player } from './types.js';
+import * as draw from './draw.js';
+import type { Player, Stroke } from './types.js';
 
 const PORT = Number(process.env.PORT ?? 4001);
 const CORS_ORIGIN = (process.env.CORS_ORIGIN ?? 'http://localhost:5173')
@@ -99,10 +100,95 @@ io.on('connection', (socket) => {
 		await game.useHint(io, code, playerId);
 	});
 
-	socket.on('disconnect', async () => {
-		for (const room of socket.rooms) {
-			if (room === socket.id) continue;
-			await game.handleDisconnect(io, room, playerId);
+	// ── Draw Together ────────────────────────────────────────────────────
+	socket.on('draw:room:create', async (payload, callback) => {
+		try {
+			const { code } = await draw.createRoom(playerId, payload?.ratio);
+			socket.join(`draw:${code}`);
+			callback?.({ ok: true, code });
+		} catch (e) {
+			callback?.({ ok: false, message: (e as Error).message });
+		}
+	});
+
+	socket.on('draw:room:join', async ({ code }, callback) => {
+		try {
+			const result = await draw.joinRoom(code, playerId, playerName);
+			if (!result) return callback?.({ ok: false, message: 'ไม่พบห้องนี้' });
+
+			socket.join(`draw:${code}`);
+			const player = result.players.find((p) => p.id === playerId);
+			if (player) io.to(`draw:${code}`).emit('draw:room:playerJoined', { player });
+			callback?.({ ok: true, room: result.room, players: result.players, strokes: result.strokes });
+		} catch (e) {
+			callback?.({ ok: false, message: (e as Error).message });
+		}
+	});
+
+	socket.on('draw:room:leave', async ({ code }) => {
+		await draw.leaveRoom(io, code, playerId);
+		socket.leave(`draw:${code}`);
+	});
+
+	// Only sockets that actually joined a draw room may act on it.
+	const inDrawRoom = (code: string) => socket.rooms.has(`draw:${code}`);
+
+	socket.on('draw:stroke:start', ({ code, stroke }: { code: string; stroke: Stroke }) => {
+		if (!inDrawRoom(code)) return;
+		// Stamp the author from the socket — per-player undo relies on this
+		// being trustworthy, so never take playerId from the payload.
+		const stamped: Stroke = { ...stroke, playerId };
+		draw.startStroke(code, stamped);
+		socket.to(`draw:${code}`).emit('draw:stroke:start', { stroke: stamped });
+	});
+
+	socket.on(
+		'draw:stroke:points',
+		({ code, strokeId, points }: { code: string; strokeId: string; points: Stroke['points'] }) => {
+			if (!inDrawRoom(code)) return;
+			draw.appendPoints(code, strokeId, playerId, points);
+			socket.to(`draw:${code}`).emit('draw:stroke:points', { strokeId, points });
+		}
+	);
+
+	socket.on('draw:stroke:end', ({ code, strokeId }: { code: string; strokeId: string }) => {
+		if (!inDrawRoom(code)) return;
+		socket.to(`draw:${code}`).emit('draw:stroke:end', { strokeId });
+	});
+
+	// Clearing the canvas is a room vote (see draw.ts); there is no direct clear.
+	socket.on('draw:clear:request', async ({ code }: { code: string }) => {
+		if (!inDrawRoom(code)) return;
+		await draw.requestClear(io, code, playerId);
+	});
+
+	socket.on('draw:clear:respond', ({ code, approve }: { code: string; approve: boolean }) => {
+		if (!inDrawRoom(code)) return;
+		draw.respondClear(io, code, playerId, approve === true);
+	});
+
+	socket.on('draw:clear:cancel', ({ code }: { code: string }) => {
+		if (!inDrawRoom(code)) return;
+		draw.cancelClear(io, code, playerId);
+	});
+
+	socket.on('draw:undo', ({ code }: { code: string }) => {
+		if (!inDrawRoom(code)) return;
+		const strokeId = draw.undoLastStroke(code, playerId);
+		if (strokeId) io.to(`draw:${code}`).emit('draw:undone', { strokeId });
+	});
+
+	// 'disconnecting', not 'disconnect': by the time 'disconnect' fires Socket.IO
+	// has already removed the socket from every room, so socket.rooms is empty.
+	// Snapshot it — the loop awaits and the set is emptied right after this event.
+	socket.on('disconnecting', async () => {
+		for (const room of [...socket.rooms]) {
+			if (room === socket.id || room === `player:${playerId}`) continue;
+			if (room.startsWith('draw:')) {
+				await draw.handleDisconnect(io, room.slice('draw:'.length), playerId);
+			} else {
+				await game.handleDisconnect(io, room, playerId);
+			}
 		}
 	});
 });
