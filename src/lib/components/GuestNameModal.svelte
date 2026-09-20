@@ -42,13 +42,15 @@
 	>
 		<div class="mx-4 w-full max-w-[26rem] rounded-2xl bg-white p-6 shadow-xl">
 			<h3 class="text-base font-semibold text-gray-900">ตั้งชื่อเล่นของคุณ</h3>
-			<p class="mt-1 text-sm text-gray-500">เล่นได้เลยโดยไม่ต้องสมัครสมาชิก เพื่อนในห้องจะเห็นชื่อนี้</p>
+			<p class="mt-1 text-sm text-gray-500">
+				เล่นได้เลยโดยไม่ต้องสมัครสมาชิก เพื่อนในห้องจะเห็นชื่อนี้
+			</p>
 
 			<input
 				type="text"
 				bind:value={name}
 				maxlength="20"
-				placeholder="เช่น พีชจัง"
+				placeholder="เช่น ก๋วยเตี๋ยว"
 				autocomplete="off"
 				onkeydown={(e) => e.key === 'Enter' && submit()}
 				class="mt-4 w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm text-gray-700 outline-none focus:border-primary-400"

@@ -48,7 +48,15 @@ export default class DrawingService {
 		MultiplayerService.getSocket().emit('draw:undo', { code });
 	}
 
-	static clear(code: string): void {
-		MultiplayerService.getSocket().emit('draw:clear', { code });
+	static requestClear(code: string): void {
+		MultiplayerService.getSocket().emit('draw:clear:request', { code });
+	}
+
+	static respondClear(code: string, approve: boolean): void {
+		MultiplayerService.getSocket().emit('draw:clear:respond', { code, approve });
+	}
+
+	static cancelClear(code: string): void {
+		MultiplayerService.getSocket().emit('draw:clear:cancel', { code });
 	}
 }

@@ -1,7 +1,15 @@
 import { writable, get } from 'svelte/store';
 import MultiplayerService from '$lib/data/services/multiplayer';
 import DrawingService from '$lib/data/services/multiplayer/drawing';
-import type { DrawRatio, IDrawPlayer, IDrawRoom, IStroke } from '$lib/data/interface/drawing';
+import type {
+	ClearResultStatus,
+	DrawRatio,
+	IClearNotice,
+	IClearVote,
+	IDrawPlayer,
+	IDrawRoom,
+	IStroke
+} from '$lib/data/interface/drawing';
 
 interface DrawingState {
 	connecting: boolean;
@@ -16,6 +24,9 @@ interface DrawingState {
 	// Bumped whenever initialStrokes is replaced after mount (reconnect
 	// re-sync), telling DrawCanvas to reload its history from the snapshot.
 	syncVersion: number;
+	clearVote: IClearVote | null;
+	clearNotice: IClearNotice | null; // outcome of the last vote, shown briefly
+	clearCooldownUntil: number; // epoch ms; no new vote can start before this
 }
 
 const initial: DrawingState = {
@@ -25,7 +36,10 @@ const initial: DrawingState = {
 	players: [],
 	selfId: '',
 	initialStrokes: [],
-	syncVersion: 0
+	syncVersion: 0,
+	clearVote: null,
+	clearNotice: null,
+	clearCooldownUntil: 0
 };
 
 export const drawingStore = writable<DrawingState>({ ...initial });
@@ -86,7 +100,8 @@ async function resyncAfterReconnect(code: string) {
 		room: res.room!,
 		players: res.players ?? s.players,
 		initialStrokes: res.strokes ?? [],
-		syncVersion: s.syncVersion + 1
+		syncVersion: s.syncVersion + 1,
+		clearVote: null
 	}));
 }
 
@@ -112,6 +127,48 @@ function _bindEvents() {
 			...s,
 			players: [...s.players.filter((p) => p.id !== player.id), player]
 		}));
+	});
+
+	socket.on('draw:clear:vote', (vote: IClearVote) => {
+		drawingStore.update((s) => ({ ...s, clearVote: vote }));
+	});
+
+	function showNotice(notice: IClearNotice, patch: Partial<DrawingState> = {}) {
+		drawingStore.update((s) => ({ ...s, ...patch, clearNotice: notice }));
+		setTimeout(() => {
+			drawingStore.update((s) => (s.clearNotice?.id === notice.id ? { ...s, clearNotice: null } : s));
+		}, 4000);
+	}
+
+	socket.on(
+		'draw:clear:result',
+		({
+			status,
+			byName,
+			cooldownUntil
+		}: {
+			status: ClearResultStatus;
+			byName?: string;
+			cooldownUntil?: number;
+		}) => {
+			showNotice(
+				{ id: Date.now(), status, byName },
+				{ clearVote: null, clearCooldownUntil: cooldownUntil ?? 0 }
+			);
+		}
+	);
+
+	// The server refused our request: a vote is already running, or the
+	// room is in its post-vote cooldown.
+	socket.on('draw:clear:denied', ({ reason, retryAt }: { reason: 'busy' | 'cooldown'; retryAt?: number }) => {
+		showNotice(
+			{
+				id: Date.now(),
+				status: reason,
+				seconds: retryAt ? Math.max(1, Math.ceil((retryAt - Date.now()) / 1000)) : undefined
+			},
+			retryAt ? { clearCooldownUntil: retryAt } : {}
+		);
 	});
 
 	socket.on('draw:room:playerLeft', ({ playerId }: { playerId: string }) => {

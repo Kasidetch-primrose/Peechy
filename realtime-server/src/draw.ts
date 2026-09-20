@@ -45,6 +45,7 @@ export async function joinRoom(
 export async function leaveRoom(io: Server, code: string, playerId: string): Promise<void> {
 	await rooms.removePlayer(code, playerId);
 	io.to(`draw:${code}`).emit('draw:room:playerLeft', { playerId });
+	dropVoter(io, code, playerId);
 }
 
 export function startStroke(code: string, stroke: Stroke): void {
@@ -75,8 +76,130 @@ export function undoLastStroke(code: string, playerId: string): string | null {
 	return null;
 }
 
-export function clearRoom(code: string): void {
+function clearRoom(code: string): void {
 	if (roomStrokes.has(code)) roomStrokes.set(code, []);
+}
+
+// ── Clear-canvas vote ─────────────────────────────────────────────────────
+// Clearing wipes everyone's work, so it only happens when every player who
+// is online when the vote starts says yes. One vote per room at a time.
+
+const CLEAR_VOTE_MS = 30_000;
+// After any vote ends (any outcome) nobody can start another for this long,
+// so a rejected request can't be re-spammed at the room.
+const CLEAR_COOLDOWN_MS = 10_000;
+
+const clearCooldownUntil = new Map<string, number>();
+
+interface ClearVote {
+	initiatorId: string;
+	names: Map<string, string>;
+	votes: Map<string, boolean | null>; // null = hasn't answered yet
+	expiresAt: number;
+	timer: NodeJS.Timeout;
+}
+
+const clearVotes = new Map<string, ClearVote>();
+
+function emitVoteState(io: Server, code: string, vote: ClearVote): void {
+	io.to(`draw:${code}`).emit('draw:clear:vote', {
+		initiatorId: vote.initiatorId,
+		initiatorName: vote.names.get(vote.initiatorId) ?? '',
+		expiresAt: vote.expiresAt,
+		votes: Object.fromEntries(vote.votes)
+	});
+}
+
+type ClearOutcome = 'approved' | 'rejected' | 'expired' | 'cancelled';
+
+function finishClearVote(io: Server, code: string, status: ClearOutcome, byName?: string): void {
+	const vote = clearVotes.get(code);
+	if (!vote) return;
+	clearTimeout(vote.timer);
+	clearVotes.delete(code);
+	const cooldownUntil = Date.now() + CLEAR_COOLDOWN_MS;
+	clearCooldownUntil.set(code, cooldownUntil);
+	if (status === 'approved') {
+		clearRoom(code);
+		io.to(`draw:${code}`).emit('draw:cleared');
+	}
+	io.to(`draw:${code}`).emit('draw:clear:result', { status, byName, cooldownUntil });
+}
+
+function allYes(vote: ClearVote): boolean {
+	return [...vote.votes.values()].every((v) => v === true);
+}
+
+export async function requestClear(io: Server, code: string, playerId: string): Promise<void> {
+	if (!roomStrokes.has(code)) return;
+
+	// Tell the requester (all their tabs) why nothing happened instead of
+	// dropping the request silently.
+	const deny = (reason: 'busy' | 'cooldown', retryAt?: number): void => {
+		io.to(`player:${playerId}`).emit('draw:clear:denied', { reason, retryAt });
+	};
+
+	if (clearVotes.has(code)) {
+		deny('busy');
+		return;
+	}
+	const cooldownEnds = clearCooldownUntil.get(code) ?? 0;
+	if (Date.now() < cooldownEnds) {
+		deny('cooldown', cooldownEnds);
+		return;
+	}
+
+	const online = (await rooms.getAllPlayers(code)).filter((p) => p.connected || p.id === playerId);
+	if (!online.some((p) => p.id === playerId)) return;
+
+	// Nobody else to ask — just clear.
+	if (online.length <= 1) {
+		clearRoom(code);
+		io.to(`draw:${code}`).emit('draw:cleared');
+		return;
+	}
+
+	const vote: ClearVote = {
+		initiatorId: playerId,
+		names: new Map(online.map((p) => [p.id, p.name])),
+		votes: new Map(online.map((p) => [p.id, p.id === playerId ? true : null])),
+		expiresAt: Date.now() + CLEAR_VOTE_MS,
+		timer: setTimeout(() => finishClearVote(io, code, 'expired'), CLEAR_VOTE_MS)
+	};
+	clearVotes.set(code, vote);
+	emitVoteState(io, code, vote);
+}
+
+export function respondClear(io: Server, code: string, playerId: string, approve: boolean): void {
+	const vote = clearVotes.get(code);
+	if (!vote || playerId === vote.initiatorId || vote.votes.get(playerId) !== null) return;
+
+	if (!approve) {
+		finishClearVote(io, code, 'rejected', vote.names.get(playerId));
+		return;
+	}
+	vote.votes.set(playerId, true);
+	if (allYes(vote)) finishClearVote(io, code, 'approved');
+	else emitVoteState(io, code, vote);
+}
+
+export function cancelClear(io: Server, code: string, playerId: string): void {
+	const vote = clearVotes.get(code);
+	if (vote && vote.initiatorId === playerId) finishClearVote(io, code, 'cancelled');
+}
+
+// A voter left or dropped: their answer no longer counts. If they started
+// the vote, it's cancelled; otherwise the rest may now be unanimous.
+function dropVoter(io: Server, code: string, playerId: string): void {
+	const vote = clearVotes.get(code);
+	if (!vote || !vote.votes.has(playerId)) return;
+	if (vote.initiatorId === playerId) {
+		finishClearVote(io, code, 'cancelled');
+		return;
+	}
+	vote.votes.delete(playerId);
+	if (allYes(vote)) finishClearVote(io, code, 'approved');
+	else emitVoteState(io, code, vote);
 }
 
 export async function handleDisconnect(io: Server, code: string, playerId: string): Promise<void> {
@@ -85,4 +208,5 @@ export async function handleDisconnect(io: Server, code: string, playerId: strin
 	player.connected = false;
 	await rooms.setPlayer(code, player);
 	io.to(`draw:${code}`).emit('draw:room:playerLeft', { playerId });
+	dropVoter(io, code, playerId);
 }

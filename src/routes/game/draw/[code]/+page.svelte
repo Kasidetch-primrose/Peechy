@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { get } from 'svelte/store';
+	import { fade, scale } from 'svelte/transition';
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
 	import { authUserStore } from '$lib/data/stores/authUser';
@@ -7,6 +8,7 @@
 	import DrawingService from '$lib/data/services/multiplayer/drawing';
 	import DrawCanvas from '$lib/components/DrawCanvas.svelte';
 	import GuestNameModal from '$lib/components/GuestNameModal.svelte';
+	import ClearVotePrompt from '$lib/components/ClearVotePrompt.svelte';
 	import { getGuestId, saveGuestName } from '$lib/utils/guest-identity';
 	import type { DrawTool } from '$lib/data/interface/drawing';
 
@@ -14,6 +16,23 @@
 	const selfId = $derived($drawingStore.selfId);
 	let showGuestModal = $state(false);
 	let canUndo = $state(false);
+	let showClearConfirm = $state(false);
+
+	// Someone else's vote started while this dialog was open — it's moot now.
+	$effect(() => {
+		if ($drawingStore.clearVote) showClearConfirm = false;
+	});
+
+	let now = $state(Date.now());
+	$effect(() => {
+		const ticker = setInterval(() => (now = Date.now()), 500);
+		return () => clearInterval(ticker);
+	});
+	const cooldownSeconds = $derived(Math.max(0, Math.ceil(($drawingStore.clearCooldownUntil - now) / 1000)));
+
+	const reduceMotion =
+		typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+	const motion = (ms: number) => (reduceMotion ? 0 : ms);
 
 	const PEN_COLORS = ['#1f2937', '#ff9b73', '#ffaab0', '#ffe4a0', '#a8edcc', '#a8d8ff', '#d4b8ff', '#ffffff'];
 	let tool = $state<DrawTool>('pen');
@@ -74,10 +93,9 @@
 		goto('/game/draw');
 	}
 
-	function handleClear() {
-		if (confirm('ล้างกระดาษทั้งหมด? ทุกคนในห้องจะเห็นกระดาษว่างเปล่า')) {
-			DrawingService.clear(code);
-		}
+	function confirmClearRequest() {
+		showClearConfirm = false;
+		DrawingService.requestClear(code);
 	}
 
 	function copyCode() {
@@ -92,6 +110,45 @@
 	onConfirm={handleGuestConfirm}
 	onCancel={() => goto('/game/draw')}
 />
+
+{#if $drawingStore.room}
+	<ClearVotePrompt {code} {selfId} />
+{/if}
+
+{#if showClearConfirm}
+	<div
+		transition:fade={{ duration: motion(180) }}
+		class="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm"
+		role="dialog"
+		aria-modal="true"
+	>
+		<div
+			transition:scale={{ start: 0.94, duration: motion(200) }}
+			class="mx-4 w-full max-w-[26rem] rounded-2xl bg-white p-6 shadow-xl"
+		>
+			<h3 class="text-base font-semibold text-gray-900">ขอล้างกระดาษ?</h3>
+			<p class="mt-1 text-sm text-gray-500">
+				ระบบจะให้ทุกคนในห้องโหวต ต้องเห็นด้วยครบทุกคนจึงจะล้าง ถ้ามีคนไม่เห็นด้วยหรือหมดเวลา 30 วินาที กระดาษจะไม่ถูกล้าง
+			</p>
+			<div class="mt-5 flex gap-3">
+				<button
+					type="button"
+					onclick={() => (showClearConfirm = false)}
+					class="flex-1 rounded-xl border border-gray-200 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
+				>
+					ยกเลิก
+				</button>
+				<button
+					type="button"
+					onclick={confirmClearRequest}
+					class="flex-1 rounded-xl bg-primary-500 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-400"
+				>
+					ขอล้างกระดาษ
+				</button>
+			</div>
+		</div>
+	</div>
+{/if}
 
 {#if !$drawingStore.room && !$drawingStore.error}
 	<div class="flex min-h-screen items-center justify-center">
@@ -150,10 +207,11 @@
 				</button>
 				<button
 					type="button"
-					onclick={handleClear}
-					class="rounded-full border border-gray-200 px-4 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50"
+					onclick={() => (showClearConfirm = true)}
+					disabled={!!$drawingStore.clearVote || cooldownSeconds > 0}
+					class="rounded-full border border-gray-200 px-4 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
 				>
-					ล้างกระดาษ
+					ล้างกระดาษ{cooldownSeconds > 0 && !$drawingStore.clearVote ? ` (${cooldownSeconds})` : ''}
 				</button>
 				<button
 					type="button"

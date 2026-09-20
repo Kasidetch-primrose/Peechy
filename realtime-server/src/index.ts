@@ -156,10 +156,20 @@ io.on('connection', (socket) => {
 		socket.to(`draw:${code}`).emit('draw:stroke:end', { strokeId });
 	});
 
-	socket.on('draw:clear', ({ code }: { code: string }) => {
+	// Clearing the canvas is a room vote (see draw.ts); there is no direct clear.
+	socket.on('draw:clear:request', async ({ code }: { code: string }) => {
 		if (!inDrawRoom(code)) return;
-		draw.clearRoom(code);
-		io.to(`draw:${code}`).emit('draw:cleared');
+		await draw.requestClear(io, code, playerId);
+	});
+
+	socket.on('draw:clear:respond', ({ code, approve }: { code: string; approve: boolean }) => {
+		if (!inDrawRoom(code)) return;
+		draw.respondClear(io, code, playerId, approve === true);
+	});
+
+	socket.on('draw:clear:cancel', ({ code }: { code: string }) => {
+		if (!inDrawRoom(code)) return;
+		draw.cancelClear(io, code, playerId);
 	});
 
 	socket.on('draw:undo', ({ code }: { code: string }) => {
@@ -168,9 +178,12 @@ io.on('connection', (socket) => {
 		if (strokeId) io.to(`draw:${code}`).emit('draw:undone', { strokeId });
 	});
 
-	socket.on('disconnect', async () => {
-		for (const room of socket.rooms) {
-			if (room === socket.id) continue;
+	// 'disconnecting', not 'disconnect': by the time 'disconnect' fires Socket.IO
+	// has already removed the socket from every room, so socket.rooms is empty.
+	// Snapshot it — the loop awaits and the set is emptied right after this event.
+	socket.on('disconnecting', async () => {
+		for (const room of [...socket.rooms]) {
+			if (room === socket.id || room === `player:${playerId}`) continue;
 			if (room.startsWith('draw:')) {
 				await draw.handleDisconnect(io, room.slice('draw:'.length), playerId);
 			} else {

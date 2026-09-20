@@ -49,3 +49,22 @@ export interface IStroke {
 }
 
 export type DrawTool = 'pen' | 'eraser' | 'bucket';
+
+// A room-wide vote to clear the canvas. votes: playerId -> true (yes) /
+// null (hasn't answered). The starter is always true.
+export interface IClearVote {
+	initiatorId: string;
+	initiatorName: string;
+	expiresAt: number;
+	votes: Record<string, boolean | null>;
+}
+
+export type ClearResultStatus = 'approved' | 'rejected' | 'expired' | 'cancelled';
+
+// 'busy' / 'cooldown' are replies to a request the server refused.
+export interface IClearNotice {
+	id: number;
+	status: ClearResultStatus | 'busy' | 'cooldown';
+	byName?: string;
+	seconds?: number;
+}
