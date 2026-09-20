@@ -66,14 +66,14 @@
 				<button
 					type="button"
 					onclick={() => DrawingService.respondClear(code, false)}
-					class="flex-1 rounded-xl border border-gray-200 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
+					class="flex-1 cursor-pointer rounded-xl border border-gray-200 py-2 text-sm font-medium text-gray-700 transition-all hover:border-gray-300 hover:bg-gray-100 active:scale-95"
 				>
 					ไม่เห็นด้วย
 				</button>
 				<button
 					type="button"
 					onclick={() => DrawingService.respondClear(code, true)}
-					class="flex-1 rounded-xl bg-primary-500 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-400"
+					class="flex-1 cursor-pointer rounded-xl bg-primary-500 py-2 text-sm font-semibold text-white transition-all hover:bg-primary-400 hover:shadow-md active:scale-95 active:bg-primary-600"
 				>
 					เห็นด้วย
 				</button>
@@ -91,7 +91,7 @@
 			<button
 				type="button"
 				onclick={() => DrawingService.cancelClear(code)}
-				class="rounded-full border border-gray-200 px-3 py-1 text-xs font-medium text-gray-600 hover:bg-gray-50"
+				class="cursor-pointer rounded-full border border-gray-200 px-3 py-1 text-xs font-medium text-gray-600 transition-all hover:border-gray-300 hover:bg-gray-100 active:scale-95"
 			>
 				ยกเลิก
 			</button>

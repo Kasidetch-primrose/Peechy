@@ -53,7 +53,7 @@
 				placeholder="เช่น ก๋วยเตี๋ยว"
 				autocomplete="off"
 				onkeydown={(e) => e.key === 'Enter' && submit()}
-				class="mt-4 w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm text-gray-700 outline-none focus:border-primary-400"
+				class="mt-4 w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm text-gray-700 outline-none select-text focus:border-primary-400"
 			/>
 
 			<div class="mt-5 flex gap-3">

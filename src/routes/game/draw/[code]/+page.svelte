@@ -1,6 +1,8 @@
 <script lang="ts">
+	import { onDestroy } from 'svelte';
 	import { get } from 'svelte/store';
-	import { fade, scale } from 'svelte/transition';
+	import { fade, fly, scale } from 'svelte/transition';
+	import { copyText } from '$lib/utils/clipboard';
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
 	import { authUserStore } from '$lib/data/stores/authUser';
@@ -21,6 +23,28 @@
 	// Someone else's vote started while this dialog was open — it's moot now.
 	$effect(() => {
 		if ($drawingStore.clearVote) showClearConfirm = false;
+	});
+
+	// Rapid taps on the canvas make iOS select the nearest text (highlight
+	// handles + magnifier loupe), and that text can be in the navbar, outside
+	// this page's root. Nothing on the drawing screen needs selecting, so turn
+	// selection off for the whole document while this page is open.
+	$effect(() => {
+		document.body.classList.add('no-text-select');
+
+		// CSS alone doesn't stop iOS's selection loupe on rapid taps; vetoing the
+		// selection at its source does. Form fields (the nickname box) still work.
+		const blockSelection = (e: Event) => {
+			const el = e.target instanceof Node ? (e.target.parentElement ?? (e.target as Element)) : null;
+			if (el instanceof Element && el.closest('input, textarea')) return;
+			e.preventDefault();
+		};
+		document.addEventListener('selectstart', blockSelection);
+
+		return () => {
+			document.body.classList.remove('no-text-select');
+			document.removeEventListener('selectstart', blockSelection);
+		};
 	});
 
 	// The navbar's height varies with screen width / login state, so measure it.
@@ -108,9 +132,15 @@
 		DrawingService.requestClear(code);
 	}
 
-	function copyCode() {
-		navigator.clipboard?.writeText(code);
+	let copyToast = $state<'ok' | 'fail' | null>(null);
+	let copyToastTimer: ReturnType<typeof setTimeout> | undefined;
+
+	async function copyCode() {
+		copyToast = (await copyText(code)) ? 'ok' : 'fail';
+		clearTimeout(copyToastTimer);
+		copyToastTimer = setTimeout(() => (copyToast = null), 2200);
 	}
+	onDestroy(() => clearTimeout(copyToastTimer));
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
@@ -123,6 +153,17 @@
 
 {#if $drawingStore.room}
 	<ClearVotePrompt {code} {selfId} />
+{/if}
+
+{#if copyToast}
+	<div
+		in:fly={{ y: -14, duration: motion(220) }}
+		out:fade={{ duration: motion(160) }}
+		class="pointer-events-none fixed top-20 left-1/2 z-[80] -translate-x-1/2 rounded-2xl bg-gray-900/90 px-4 py-3 text-center text-sm text-white shadow-xl"
+		role="status"
+	>
+		{copyToast === 'ok' ? `📋 คัดลอกรหัสห้องแล้ว (${code})` : `คัดลอกไม่สำเร็จ — รหัสห้องคือ ${code}`}
+	</div>
 {/if}
 
 {#if showClearConfirm}
@@ -144,14 +185,14 @@
 				<button
 					type="button"
 					onclick={() => (showClearConfirm = false)}
-					class="flex-1 rounded-xl border border-gray-200 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
+					class="flex-1 cursor-pointer rounded-xl border border-gray-200 py-2 text-sm font-medium text-gray-700 transition-all hover:border-gray-300 hover:bg-gray-100 active:scale-95"
 				>
 					ยกเลิก
 				</button>
 				<button
 					type="button"
 					onclick={confirmClearRequest}
-					class="flex-1 rounded-xl bg-primary-500 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-400"
+					class="flex-1 cursor-pointer rounded-xl bg-primary-500 py-2 text-sm font-semibold text-white transition-all hover:bg-primary-400 hover:shadow-md active:scale-95 active:bg-primary-600"
 				>
 					ขอล้างกระดาษ
 				</button>
@@ -173,7 +214,7 @@
 	<!-- One screen tall (viewport minus the measured navbar height) so the tool bar never
 	     scrolls out of view. The min-h is only a fallback for very short windows. -->
 	<div
-		class="flex min-h-[26rem] flex-col gap-2 bg-linear-to-br from-primary-100/40 via-white to-primary-100/20 p-2 sm:p-3"
+		class="flex min-h-[26rem] flex-col gap-2 bg-linear-to-br from-primary-100/40 via-white to-primary-100/20 p-2 select-none sm:p-3 [-webkit-tap-highlight-color:transparent] [-webkit-touch-callout:none] [&_button:not(:disabled)]:cursor-pointer"
 		style="height: calc(100dvh - {navHeight}px);"
 	>
 		<div class="flex flex-wrap items-center justify-between gap-3">
@@ -182,10 +223,24 @@
 				<button
 					type="button"
 					onclick={copyCode}
-					title="คัดลอกรหัสห้อง"
-					class="rounded-full bg-white/80 px-3 py-0.5 text-base font-bold tracking-widest text-primary-500 shadow-sm"
+					title="แตะเพื่อคัดลอกรหัสห้อง"
+					aria-label="คัดลอกรหัสห้อง {code}"
+					class="group flex items-center gap-1.5 rounded-full bg-white/80 px-3 py-0.5 text-base font-bold tracking-widest text-primary-500 shadow-sm transition-all hover:bg-white hover:shadow-md active:scale-95"
 				>
 					{code}
+					<svg
+						class="h-3.5 w-3.5 opacity-50 transition-opacity group-hover:opacity-100"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						aria-hidden="true"
+					>
+						<rect x="9" y="9" width="11" height="11" rx="2" />
+						<path d="M5 15V6a2 2 0 0 1 2-2h9" />
+					</svg>
 				</button>
 				{#if $drawingStore.room}
 					<span class="rounded-full bg-white/80 px-2.5 py-1 text-[11px] font-medium text-gray-500 shadow-sm">
@@ -216,7 +271,7 @@
 					onclick={handleUndo}
 					disabled={!canUndo}
 					title="ย้อนกลับเส้นล่าสุดของคุณ (Ctrl+Z)"
-					class="rounded-full border border-gray-200 px-3 py-1 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+					class="rounded-full border border-gray-200 px-3 py-1 text-xs font-medium text-gray-600 transition-all hover:border-gray-300 hover:bg-gray-100 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-gray-200 disabled:hover:bg-transparent"
 				>
 					↶ ย้อนกลับ
 				</button>
@@ -224,14 +279,14 @@
 					type="button"
 					onclick={() => (showClearConfirm = true)}
 					disabled={!!$drawingStore.clearVote || cooldownSeconds > 0}
-					class="rounded-full border border-gray-200 px-3 py-1 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+					class="rounded-full border border-gray-200 px-3 py-1 text-xs font-medium text-gray-600 transition-all hover:border-gray-300 hover:bg-gray-100 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-gray-200 disabled:hover:bg-transparent"
 				>
 					ล้างกระดาษ{cooldownSeconds > 0 && !$drawingStore.clearVote ? ` (${cooldownSeconds})` : ''}
 				</button>
 				<button
 					type="button"
 					onclick={handleLeave}
-					class="rounded-full border border-red-200 px-3 py-1 text-xs font-medium text-red-500 transition-colors hover:bg-red-50"
+					class="rounded-full border border-red-200 px-3 py-1 text-xs font-medium text-red-500 transition-all hover:border-red-300 hover:bg-red-50 active:scale-95"
 				>
 					ออกจากห้อง
 				</button>
@@ -261,9 +316,9 @@
 					role="radio"
 					aria-checked={tool === 'pen'}
 					onclick={() => (tool = 'pen')}
-					class="rounded-full px-3 py-1 text-xs font-medium transition-colors {tool === 'pen'
-						? 'bg-primary-500 text-white shadow-sm'
-						: 'text-gray-600 hover:bg-white'}"
+					class="rounded-full px-3 py-1 text-xs font-medium transition-all active:scale-95 {tool === 'pen'
+							? 'bg-primary-500 text-white shadow-sm hover:bg-primary-400'
+							: 'text-gray-600 hover:bg-white hover:shadow-sm'}"
 				>
 					✏️ ปากกา
 				</button>
@@ -272,9 +327,9 @@
 					role="radio"
 					aria-checked={tool === 'eraser'}
 					onclick={() => (tool = 'eraser')}
-					class="rounded-full px-3 py-1 text-xs font-medium transition-colors {tool === 'eraser'
-						? 'bg-primary-500 text-white shadow-sm'
-						: 'text-gray-600 hover:bg-white'}"
+					class="rounded-full px-3 py-1 text-xs font-medium transition-all active:scale-95 {tool === 'eraser'
+							? 'bg-primary-500 text-white shadow-sm hover:bg-primary-400'
+							: 'text-gray-600 hover:bg-white hover:shadow-sm'}"
 				>
 					🧽 ยางลบ
 				</button>
@@ -283,9 +338,9 @@
 					role="radio"
 					aria-checked={tool === 'bucket'}
 					onclick={() => (tool = 'bucket')}
-					class="rounded-full px-3 py-1 text-xs font-medium transition-colors {tool === 'bucket'
-						? 'bg-primary-500 text-white shadow-sm'
-						: 'text-gray-600 hover:bg-white'}"
+					class="rounded-full px-3 py-1 text-xs font-medium transition-all active:scale-95 {tool === 'bucket'
+							? 'bg-primary-500 text-white shadow-sm hover:bg-primary-400'
+							: 'text-gray-600 hover:bg-white hover:shadow-sm'}"
 				>
 					🪣 ถังสี
 				</button>
@@ -300,9 +355,9 @@
 							color = c;
 							if (tool === 'eraser') tool = 'pen';
 						}}
-						class="h-7 w-7 rounded-full border-2 transition-transform {color === c && tool !== 'eraser'
+						class="h-7 w-7 rounded-full border-2 transition-transform hover:scale-110 active:scale-95 {color === c && tool !== 'eraser'
 							? 'scale-110 border-primary-500'
-							: 'border-gray-200'}"
+							: 'border-gray-200 hover:border-primary-300'}"
 						style="background-color: {c};"
 					></button>
 				{/each}
@@ -312,7 +367,7 @@
 					oninput={() => {
 						if (tool === 'eraser') tool = 'pen';
 					}}
-					class="h-7 w-7 cursor-pointer rounded-full border border-gray-200"
+					class="h-7 w-7 cursor-pointer rounded-full border border-gray-200 transition-transform hover:scale-110 hover:border-primary-300"
 				/>
 			</div>
 
@@ -324,7 +379,7 @@
 					max="24"
 					bind:value={strokeWidth}
 					disabled={tool === 'bucket'}
-					class="w-28 accent-primary-500"
+					class="w-28 cursor-pointer accent-primary-500 disabled:cursor-not-allowed"
 				/>
 				<span
 					class="inline-block rounded-full bg-gray-700"
