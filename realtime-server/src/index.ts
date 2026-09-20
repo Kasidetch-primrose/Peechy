@@ -130,26 +130,42 @@ io.on('connection', (socket) => {
 		socket.leave(`draw:${code}`);
 	});
 
+	// Only sockets that actually joined a draw room may act on it.
+	const inDrawRoom = (code: string) => socket.rooms.has(`draw:${code}`);
+
 	socket.on('draw:stroke:start', ({ code, stroke }: { code: string; stroke: Stroke }) => {
-		draw.startStroke(code, stroke);
-		socket.to(`draw:${code}`).emit('draw:stroke:start', { stroke });
+		if (!inDrawRoom(code)) return;
+		// Stamp the author from the socket — per-player undo relies on this
+		// being trustworthy, so never take playerId from the payload.
+		const stamped: Stroke = { ...stroke, playerId };
+		draw.startStroke(code, stamped);
+		socket.to(`draw:${code}`).emit('draw:stroke:start', { stroke: stamped });
 	});
 
 	socket.on(
 		'draw:stroke:points',
 		({ code, strokeId, points }: { code: string; strokeId: string; points: Stroke['points'] }) => {
-			draw.appendPoints(code, strokeId, points);
+			if (!inDrawRoom(code)) return;
+			draw.appendPoints(code, strokeId, playerId, points);
 			socket.to(`draw:${code}`).emit('draw:stroke:points', { strokeId, points });
 		}
 	);
 
 	socket.on('draw:stroke:end', ({ code, strokeId }: { code: string; strokeId: string }) => {
+		if (!inDrawRoom(code)) return;
 		socket.to(`draw:${code}`).emit('draw:stroke:end', { strokeId });
 	});
 
 	socket.on('draw:clear', ({ code }: { code: string }) => {
+		if (!inDrawRoom(code)) return;
 		draw.clearRoom(code);
 		io.to(`draw:${code}`).emit('draw:cleared');
+	});
+
+	socket.on('draw:undo', ({ code }: { code: string }) => {
+		if (!inDrawRoom(code)) return;
+		const strokeId = draw.undoLastStroke(code, playerId);
+		if (strokeId) io.to(`draw:${code}`).emit('draw:undone', { strokeId });
 	});
 
 	socket.on('disconnect', async () => {

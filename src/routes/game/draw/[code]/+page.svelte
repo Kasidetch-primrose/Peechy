@@ -1,14 +1,19 @@
 <script lang="ts">
+	import { get } from 'svelte/store';
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
 	import { authUserStore } from '$lib/data/stores/authUser';
 	import { connect, joinRoom, leaveRoom, drawingStore } from '$lib/data/stores/drawing';
 	import DrawingService from '$lib/data/services/multiplayer/drawing';
 	import DrawCanvas from '$lib/components/DrawCanvas.svelte';
+	import GuestNameModal from '$lib/components/GuestNameModal.svelte';
+	import { getGuestId, saveGuestName } from '$lib/utils/guest-identity';
 	import type { DrawTool } from '$lib/data/interface/drawing';
 
 	const code = $derived(page.params.code ?? '');
-	const selfId = $derived(String($authUserStore.user?.id ?? ''));
+	const selfId = $derived($drawingStore.selfId);
+	let showGuestModal = $state(false);
+	let canUndo = $state(false);
 
 	const PEN_COLORS = ['#1f2937', '#ff9b73', '#ffaab0', '#ffe4a0', '#a8edcc', '#a8d8ff', '#d4b8ff', '#ffffff'];
 	let tool = $state<DrawTool>('pen');
@@ -21,17 +26,48 @@
 	let joinedCode = $state('');
 
 	$effect(() => {
-		if (!$authUserStore.user) {
-			goto('/auth/login');
+		if (joinedCode === code) return;
+
+		// Already connected this session (came from the create/join page) —
+		// reuse that identity. Read via get() so joinRoom()'s own store
+		// writes don't re-trigger this effect.
+		if (get(drawingStore).selfId) {
+			joinedCode = code;
+			joinRoom(code);
 			return;
 		}
-		if (joinedCode === code) return;
-		joinedCode = code;
 
 		const user = $authUserStore.user;
-		connect(String(user.id), user.username);
-		joinRoom(code);
+		if (user) {
+			joinedCode = code;
+			connect(String(user.id), user.username);
+			joinRoom(code);
+			return;
+		}
+
+		// Opened an invite link directly as a guest: ask for a nickname first.
+		showGuestModal = true;
 	});
+
+	function handleGuestConfirm(name: string) {
+		saveGuestName(name);
+		showGuestModal = false;
+		joinedCode = code;
+		connect(getGuestId(), name);
+		joinRoom(code);
+	}
+
+	function handleUndo() {
+		if (canUndo) DrawingService.undo(code);
+	}
+
+	function handleKeydown(e: KeyboardEvent) {
+		if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.key.toLowerCase() !== 'z') return;
+		const target = e.target as HTMLElement | null;
+		if (target && ['INPUT', 'TEXTAREA'].includes(target.tagName)) return;
+		e.preventDefault();
+		handleUndo();
+	}
 
 	function handleLeave() {
 		leaveRoom();
@@ -48,6 +84,14 @@
 		navigator.clipboard?.writeText(code);
 	}
 </script>
+
+<svelte:window onkeydown={handleKeydown} />
+
+<GuestNameModal
+	bind:open={showGuestModal}
+	onConfirm={handleGuestConfirm}
+	onCancel={() => goto('/game/draw')}
+/>
 
 {#if !$drawingStore.room && !$drawingStore.error}
 	<div class="flex min-h-screen items-center justify-center">
@@ -97,6 +141,15 @@
 			<div class="flex items-center gap-2">
 				<button
 					type="button"
+					onclick={handleUndo}
+					disabled={!canUndo}
+					title="ย้อนกลับเส้นล่าสุดของคุณ (Ctrl+Z)"
+					class="rounded-full border border-gray-200 px-4 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+				>
+					↶ ย้อนกลับ
+				</button>
+				<button
+					type="button"
 					onclick={handleClear}
 					class="rounded-full border border-gray-200 px-4 py-1.5 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50"
 				>
@@ -122,6 +175,7 @@
 					{tool}
 					{color}
 					{strokeWidth}
+					bind:canUndo
 				/>
 			{/if}
 		</div>

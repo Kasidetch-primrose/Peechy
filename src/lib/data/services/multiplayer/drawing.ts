@@ -44,6 +44,10 @@ export default class DrawingService {
 		MultiplayerService.getSocket().emit('draw:stroke:end', { code, strokeId });
 	}
 
+	static undo(code: string): void {
+		MultiplayerService.getSocket().emit('draw:undo', { code });
+	}
+
 	static clear(code: string): void {
 		MultiplayerService.getSocket().emit('draw:clear', { code });
 	}

@@ -16,7 +16,11 @@ export function getGuestId(): string {
 	if (typeof localStorage === 'undefined') return '';
 	let id = localStorage.getItem(GUEST_ID_KEY);
 	if (!id) {
-		id = `guest_${crypto.randomUUID().slice(0, 8)}`;
+		// getRandomValues works over plain http://<LAN-IP> (phones); randomUUID doesn't.
+		const suffix = Array.from(crypto.getRandomValues(new Uint8Array(4)), (b) =>
+			b.toString(16).padStart(2, '0')
+		).join('');
+		id = `guest_${suffix}`;
 		localStorage.setItem(GUEST_ID_KEY, id);
 	}
 	return id;

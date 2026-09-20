@@ -3,38 +3,56 @@
 	import { authUserStore } from '$lib/data/stores/authUser';
 	import { connect, createRoom, joinRoom, drawingStore } from '$lib/data/stores/drawing';
 	import { DRAW_RATIO_OPTIONS, DRAW_RATIO_VALUE, type DrawRatio } from '$lib/data/interface/drawing';
+	import { getGuestId, saveGuestName, type PlayerIdentity } from '$lib/utils/guest-identity';
+	import GuestNameModal from '$lib/components/GuestNameModal.svelte';
 
 	let ratio = $state<DrawRatio>('4:3');
 	let joinCode = $state('');
 	let creating = $state(false);
 	let joining = $state(false);
 
-	function requireLogin(): boolean {
-		if ($authUserStore.user) return true;
-		goto('/auth/login');
-		return false;
+	let showGuestModal = $state(false);
+	let pendingAction: ((identity: PlayerIdentity) => Promise<void>) | null = null;
+
+	// Logged-in users go straight through; guests are always asked for a
+	// nickname first (same behaviour as the guess-game join flow).
+	async function withIdentity(action: (identity: PlayerIdentity) => Promise<void>) {
+		const user = $authUserStore.user;
+		if (user) {
+			await action({ id: String(user.id), name: user.username });
+			return;
+		}
+		pendingAction = action;
+		showGuestModal = true;
 	}
 
-	async function handleCreate() {
-		if (!requireLogin()) return;
-		const user = $authUserStore.user!;
-		creating = true;
-		connect(String(user.id), user.username);
-		const code = await createRoom(ratio);
-		creating = false;
-		if (code) goto(`/game/draw/${code}`);
+	function handleGuestConfirm(name: string) {
+		saveGuestName(name);
+		const action = pendingAction;
+		pendingAction = null;
+		void action?.({ id: getGuestId(), name });
 	}
 
-	async function handleJoin() {
+	function handleCreate() {
+		return withIdentity(async (identity) => {
+			creating = true;
+			connect(identity.id, identity.name);
+			const code = await createRoom(ratio);
+			creating = false;
+			if (code) goto(`/game/draw/${code}`);
+		});
+	}
+
+	function handleJoin() {
 		const code = joinCode.trim();
 		if (code.length !== 5) return;
-		if (!requireLogin()) return;
-		const user = $authUserStore.user!;
-		joining = true;
-		connect(String(user.id), user.username);
-		const ok = await joinRoom(code);
-		joining = false;
-		if (ok) goto(`/game/draw/${code}`);
+		return withIdentity(async (identity) => {
+			joining = true;
+			connect(identity.id, identity.name);
+			const ok = await joinRoom(code);
+			joining = false;
+			if (ok) goto(`/game/draw/${code}`);
+		});
 	}
 </script>
 
@@ -122,3 +140,12 @@
 		</div>
 	</div>
 </div>
+
+<GuestNameModal
+	bind:open={showGuestModal}
+	onConfirm={handleGuestConfirm}
+	onCancel={() => {
+		showGuestModal = false;
+		pendingAction = null;
+	}}
+/>

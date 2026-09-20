@@ -54,10 +54,25 @@ export function startStroke(code: string, stroke: Stroke): void {
 	if (strokes.length > MAX_STROKES_PER_ROOM) strokes.shift();
 }
 
-export function appendPoints(code: string, strokeId: string, points: Point[]): void {
+export function appendPoints(code: string, strokeId: string, playerId: string, points: Point[]): void {
 	const stroke = roomStrokes.get(code)?.find((s) => s.id === strokeId);
-	if (!stroke) return;
+	if (!stroke || stroke.playerId !== playerId) return;
 	stroke.points.push(...points);
+}
+
+// Removes and returns the id of this player's most recent stroke (pen,
+// eraser or fill), or null if they have none. Only ever touches strokes
+// authored by `playerId`.
+export function undoLastStroke(code: string, playerId: string): string | null {
+	const strokes = roomStrokes.get(code);
+	if (!strokes) return null;
+	for (let i = strokes.length - 1; i >= 0; i--) {
+		if (strokes[i].playerId === playerId) {
+			const [removed] = strokes.splice(i, 1);
+			return removed.id;
+		}
+	}
+	return null;
 }
 
 export function clearRoom(code: string): void {

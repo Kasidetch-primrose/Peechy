@@ -18,9 +18,20 @@
 		tool: DrawTool;
 		color: string;
 		strokeWidth: number;
+		// True while this player has at least one stroke that undo could remove.
+		canUndo?: boolean;
 	}
 
-	let { code, selfId, ratio, initialStrokes, tool, color, strokeWidth }: Props = $props();
+	let {
+		code,
+		selfId,
+		ratio,
+		initialStrokes,
+		tool,
+		color,
+		strokeWidth,
+		canUndo = $bindable(false)
+	}: Props = $props();
 
 	// The eraser is easier to use with a wider tip than the pen at the same slider value.
 	const ERASER_WIDTH_FACTOR = 2.5;
@@ -60,6 +71,10 @@
 	// Seeded once from the initialStrokes snapshot in onMount below —
 	// intentionally not reactive to later prop changes.
 	let allStrokes: IStroke[] = [];
+
+	function syncCanUndo() {
+		canUndo = allStrokes.some((s) => s.playerId === selfId);
+	}
 
 	// Stroke points are stored/transmitted as fractions (0..1) of the paper,
 	// NOT raw pixels — different players' screens (and this same window
@@ -296,6 +311,7 @@
 				points: [point]
 			};
 			allStrokes = [...allStrokes, fillStroke];
+			syncCanUndo();
 			applyFill(toPixelPoint(point), color);
 			DrawingService.strokeStart(code, fillStroke);
 			DrawingService.strokeEnd(code, strokeId);
@@ -316,6 +332,7 @@
 		activeStrokeId = strokeId;
 		activeStroke = stroke;
 		allStrokes = [...allStrokes, stroke];
+		syncCanUndo();
 		const pixelPoint = toPixelPoint(point);
 		lastPoint.set(strokeId, pixelPoint);
 		drawDot(pixelPoint, stroke);
@@ -386,11 +403,31 @@
 	function onCleared() {
 		allStrokes = [];
 		lastPoint.clear();
+		activeStrokeId = null;
+		activeStroke = null;
+		pendingPoints = [];
+		syncCanUndo();
 		ctx?.clearRect(0, 0, canvasEl.width, canvasEl.height);
+	}
+
+	// Someone's undo removed one of their strokes. Ink can't be un-drawn on
+	// a raster canvas, so replay what's left (fills are recomputed in order).
+	function onUndone({ strokeId }: { strokeId: string }) {
+		if (!allStrokes.some((s) => s.id === strokeId)) return;
+		allStrokes = allStrokes.filter((s) => s.id !== strokeId);
+		lastPoint.delete(strokeId);
+		if (activeStrokeId === strokeId) {
+			activeStrokeId = null;
+			activeStroke = null;
+			pendingPoints = [];
+		}
+		syncCanUndo();
+		redrawAll();
 	}
 
 	onMount(() => {
 		allStrokes = [...initialStrokes];
+		syncCanUndo();
 		fitPaper();
 		resizeObserver = new ResizeObserver(() => fitPaper());
 		resizeObserver.observe(containerEl);
@@ -399,11 +436,13 @@
 		socket.on('draw:stroke:start', onRemoteStrokeStart);
 		socket.on('draw:stroke:points', onRemoteStrokePoints);
 		socket.on('draw:cleared', onCleared);
+		socket.on('draw:undone', onUndone);
 
 		return () => {
 			socket.off('draw:stroke:start', onRemoteStrokeStart);
 			socket.off('draw:stroke:points', onRemoteStrokePoints);
 			socket.off('draw:cleared', onCleared);
+			socket.off('draw:undone', onUndone);
 		};
 	});
 
