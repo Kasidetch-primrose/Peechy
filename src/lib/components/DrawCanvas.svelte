@@ -20,6 +20,8 @@
 		strokeWidth: number;
 		// True while this player has at least one stroke that undo could remove.
 		canUndo?: boolean;
+		// Changes when the parent has replaced initialStrokes (reconnect re-sync).
+		syncVersion?: number;
 	}
 
 	let {
@@ -30,7 +32,8 @@
 		tool,
 		color,
 		strokeWidth,
-		canUndo = $bindable(false)
+		canUndo = $bindable(false),
+		syncVersion = 0
 	}: Props = $props();
 
 	// The eraser is easier to use with a wider tip than the pen at the same slider value.
@@ -277,6 +280,21 @@
 		void paperSize.width;
 		void paperSize.height;
 		queueMicrotask(resizeCanvas);
+	});
+
+	// Reconnect re-sync: throw away local history and reload the server's.
+	let seenSyncVersion = 0;
+	$effect(() => {
+		const version = syncVersion;
+		if (version === seenSyncVersion) return;
+		seenSyncVersion = version;
+		allStrokes = [...initialStrokes];
+		lastPoint.clear();
+		activeStrokeId = null;
+		activeStroke = null;
+		pendingPoints = [];
+		syncCanUndo();
+		redrawAll();
 	});
 
 	function flushPending() {

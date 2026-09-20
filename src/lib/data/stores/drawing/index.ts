@@ -13,6 +13,9 @@ interface DrawingState {
 	// consumed once by DrawCanvas for the initial paint. Live strokes after
 	// that are handled directly by DrawCanvas via socket events, not here.
 	initialStrokes: IStroke[];
+	// Bumped whenever initialStrokes is replaced after mount (reconnect
+	// re-sync), telling DrawCanvas to reload its history from the snapshot.
+	syncVersion: number;
 }
 
 const initial: DrawingState = {
@@ -21,7 +24,8 @@ const initial: DrawingState = {
 	room: null,
 	players: [],
 	selfId: '',
-	initialStrokes: []
+	initialStrokes: [],
+	syncVersion: 0
 };
 
 export const drawingStore = writable<DrawingState>({ ...initial });
@@ -71,12 +75,37 @@ export function leaveRoom() {
 	resetDrawingStore();
 }
 
+// A reconnected socket gets a new id and is NOT in any Socket.IO room, so the
+// server would ignore all its draw events (strokes, undo, clear) until it
+// joins again. Re-join and pull the room's current strokes.
+async function resyncAfterReconnect(code: string) {
+	const res = await DrawingService.joinRoom(code);
+	if (!res.ok || !res.room) return;
+	drawingStore.update((s) => ({
+		...s,
+		room: res.room!,
+		players: res.players ?? s.players,
+		initialStrokes: res.strokes ?? [],
+		syncVersion: s.syncVersion + 1
+	}));
+}
+
 let bound = false;
 
 function _bindEvents() {
 	if (bound) return;
 	bound = true;
 	const socket = MultiplayerService.getSocket();
+
+	let hasConnected = socket.connected;
+	socket.on('connect', () => {
+		if (!hasConnected) {
+			hasConnected = true;
+			return;
+		}
+		const { room } = get(drawingStore);
+		if (room) void resyncAfterReconnect(room.code);
+	});
 
 	socket.on('draw:room:playerJoined', ({ player }: { player: IDrawPlayer }) => {
 		drawingStore.update((s) => ({

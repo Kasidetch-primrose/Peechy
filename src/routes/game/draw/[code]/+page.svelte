@@ -176,6 +176,7 @@
 					{color}
 					{strokeWidth}
 					bind:canUndo
+					syncVersion={$drawingStore.syncVersion}
 				/>
 			{/if}
 		</div>
