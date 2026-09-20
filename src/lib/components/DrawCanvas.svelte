@@ -297,6 +297,23 @@
 		redrawAll();
 	});
 
+	// PNG of the current drawing on the white paper. The canvas itself is
+	// transparent (the white is CSS behind it), so composite onto white first —
+	// otherwise the saved image would show erased areas and empty paper as
+	// black/transparent depending on the viewer.
+	export function exportPng(): Promise<Blob | null> {
+		if (!canvasEl || canvasEl.width === 0 || canvasEl.height === 0) return Promise.resolve(null);
+		const out = document.createElement('canvas');
+		out.width = canvasEl.width;
+		out.height = canvasEl.height;
+		const outCtx = out.getContext('2d');
+		if (!outCtx) return Promise.resolve(null);
+		outCtx.fillStyle = '#ffffff';
+		outCtx.fillRect(0, 0, out.width, out.height);
+		outCtx.drawImage(canvasEl, 0, 0);
+		return new Promise((resolve) => out.toBlob((blob) => resolve(blob), 'image/png'));
+	}
+
 	function flushPending() {
 		rafHandle = null;
 		if (!activeStrokeId || pendingPoints.length === 0) return;

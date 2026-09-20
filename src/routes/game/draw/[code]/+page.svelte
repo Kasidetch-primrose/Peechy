@@ -132,15 +132,60 @@
 		DrawingService.requestClear(code);
 	}
 
-	let copyToast = $state<'ok' | 'fail' | null>(null);
-	let copyToastTimer: ReturnType<typeof setTimeout> | undefined;
+	let toast = $state<string | null>(null);
+	let toastTimer: ReturnType<typeof setTimeout> | undefined;
+
+	function showToast(text: string) {
+		toast = text;
+		clearTimeout(toastTimer);
+		toastTimer = setTimeout(() => (toast = null), 2200);
+	}
+	onDestroy(() => clearTimeout(toastTimer));
 
 	async function copyCode() {
-		copyToast = (await copyText(code)) ? 'ok' : 'fail';
-		clearTimeout(copyToastTimer);
-		copyToastTimer = setTimeout(() => (copyToast = null), 2200);
+		showToast((await copyText(code)) ? `📋 คัดลอกรหัสห้องแล้ว (${code})` : `คัดลอกไม่สำเร็จ — รหัสห้องคือ ${code}`);
 	}
-	onDestroy(() => clearTimeout(copyToastTimer));
+
+	let canvasRef = $state<DrawCanvas>();
+	let saving = $state(false);
+
+	async function handleSave() {
+		if (saving) return;
+		saving = true;
+		try {
+			const blob = await canvasRef?.exportPng();
+			if (!blob) {
+				showToast('บันทึกรูปไม่สำเร็จ');
+				return;
+			}
+			const stamp = new Date().toISOString().slice(0, 19).replace(/[T:]/g, '-');
+			const file = new File([blob], `peechy-${code}-${stamp}.png`, { type: 'image/png' });
+
+			// On phones the share sheet is the way to reach "Save Image"/Photos.
+			// It only exists over HTTPS; elsewhere fall through to a download.
+			const isTouch = matchMedia('(pointer: coarse)').matches;
+			if (isTouch && navigator.canShare?.({ files: [file] })) {
+				try {
+					await navigator.share({ files: [file] });
+					return;
+				} catch (e) {
+					if ((e as Error).name === 'AbortError') return; // user closed the sheet
+				}
+			}
+
+			const url = URL.createObjectURL(file);
+			const link = document.createElement('a');
+			link.href = url;
+			link.download = file.name;
+			document.body.appendChild(link);
+			link.click();
+			link.remove();
+			setTimeout(() => URL.revokeObjectURL(url), 10_000);
+			showToast('💾 บันทึกรูปแล้ว');
+		} finally {
+			saving = false;
+		}
+	}
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
@@ -155,14 +200,14 @@
 	<ClearVotePrompt {code} {selfId} />
 {/if}
 
-{#if copyToast}
+{#if toast}
 	<div
 		in:fly={{ y: -14, duration: motion(220) }}
 		out:fade={{ duration: motion(160) }}
 		class="pointer-events-none fixed top-20 left-1/2 z-[80] -translate-x-1/2 rounded-2xl bg-gray-900/90 px-4 py-3 text-center text-sm text-white shadow-xl"
 		role="status"
 	>
-		{copyToast === 'ok' ? `📋 คัดลอกรหัสห้องแล้ว (${code})` : `คัดลอกไม่สำเร็จ — รหัสห้องคือ ${code}`}
+		{toast}
 	</div>
 {/if}
 
@@ -285,6 +330,15 @@
 				</button>
 				<button
 					type="button"
+					onclick={handleSave}
+					disabled={saving}
+					title="บันทึกรูปกระดาษเป็นไฟล์ PNG"
+					class="rounded-full border border-gray-200 px-3 py-1 text-xs font-medium text-gray-600 transition-all hover:border-gray-300 hover:bg-gray-100 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-gray-200 disabled:hover:bg-transparent"
+				>
+					💾 บันทึกรูป
+				</button>
+				<button
+					type="button"
 					onclick={handleLeave}
 					class="rounded-full border border-red-200 px-3 py-1 text-xs font-medium text-red-500 transition-all hover:border-red-300 hover:bg-red-50 active:scale-95"
 				>
@@ -296,6 +350,7 @@
 		<div class="relative min-h-[8rem] min-w-0 flex-1 overflow-hidden rounded-2xl border border-primary-100 bg-primary-100/30 shadow-sm">
 			{#if $drawingStore.room}
 				<DrawCanvas
+					bind:this={canvasRef}
 					{code}
 					{selfId}
 					ratio={$drawingStore.room.ratio}
