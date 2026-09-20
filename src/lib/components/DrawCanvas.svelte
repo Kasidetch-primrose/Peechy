@@ -41,11 +41,13 @@
 	// Its diameter is the exact on-screen width of the stroke being made.
 	let cursor = $state({ x: 0, y: 0, visible: false });
 	const brushDiameter = $derived(
-		Math.max(
-			4,
-			((paperSize.width - 2) * (tool === 'eraser' ? strokeWidth * ERASER_WIDTH_FACTOR : strokeWidth)) /
-				PAPER_WIDTH_UNITS
-		)
+		tool === 'bucket'
+			? 14
+			: Math.max(
+					4,
+					((paperSize.width - 2) * (tool === 'eraser' ? strokeWidth * ERASER_WIDTH_FACTOR : strokeWidth)) /
+						PAPER_WIDTH_UNITS
+				)
 	);
 
 	function updateCursor(e: PointerEvent) {
@@ -115,11 +117,108 @@
 		ctx.stroke();
 	}
 
+	// Max per-channel difference (0-255) from the clicked pixel that still
+	// counts as "the same area". Loose enough to swallow anti-aliased edges.
+	const FILL_TOLERANCE = 80;
+
+	function hexToRgb(hex: string): [number, number, number] {
+		const value = parseInt(hex.replace('#', '').slice(0, 6), 16);
+		return [(value >> 16) & 255, (value >> 8) & 255, value & 255];
+	}
+
+	// Scanline flood fill. Pixels are compared as if composited over the white
+	// paper, so transparent canvas, erased areas and white ink all count as
+	// "paper" — the way they look on screen.
+	function applyFill(pixel: IPoint, fillColor: string) {
+		const width = canvasEl.width;
+		const height = canvasEl.height;
+		const scale = width / canvasEl.getBoundingClientRect().width;
+		const startX = Math.floor(pixel.x * scale);
+		const startY = Math.floor(pixel.y * scale);
+		if (startX < 0 || startY < 0 || startX >= width || startY >= height) return;
+
+		const image = ctx.getImageData(0, 0, width, height);
+		const data = image.data;
+		const [fillR, fillG, fillB] = hexToRgb(fillColor);
+
+		const over = (i: number, channel: number) => {
+			const alpha = data[i + 3] / 255;
+			return data[i + channel] * alpha + 255 * (1 - alpha);
+		};
+		const seed = (startY * width + startX) * 4;
+		const seedR = over(seed, 0);
+		const seedG = over(seed, 1);
+		const seedB = over(seed, 2);
+		if (
+			Math.abs(seedR - fillR) < 8 &&
+			Math.abs(seedG - fillG) < 8 &&
+			Math.abs(seedB - fillB) < 8
+		) {
+			return;
+		}
+
+		const visited = new Uint8Array(width * height);
+		const canFill = (x: number, y: number) => {
+			const index = y * width + x;
+			if (visited[index]) return false;
+			const i = index * 4;
+			return (
+				Math.abs(over(i, 0) - seedR) <= FILL_TOLERANCE &&
+				Math.abs(over(i, 1) - seedG) <= FILL_TOLERANCE &&
+				Math.abs(over(i, 2) - seedB) <= FILL_TOLERANCE
+			);
+		};
+
+		const stack: number[] = [startX, startY];
+		while (stack.length > 0) {
+			const y = stack.pop()!;
+			let x = stack.pop()!;
+			while (x >= 0 && canFill(x, y)) x--;
+			x++;
+			let spanUp = false;
+			let spanDown = false;
+			while (x < width && canFill(x, y)) {
+				const index = y * width + x;
+				visited[index] = 1;
+				const i = index * 4;
+				data[i] = fillR;
+				data[i + 1] = fillG;
+				data[i + 2] = fillB;
+				data[i + 3] = 255;
+
+				if (y > 0) {
+					const open = canFill(x, y - 1);
+					if (open && !spanUp) {
+						stack.push(x, y - 1);
+						spanUp = true;
+					} else if (!open) {
+						spanUp = false;
+					}
+				}
+				if (y < height - 1) {
+					const open = canFill(x, y + 1);
+					if (open && !spanDown) {
+						stack.push(x, y + 1);
+						spanDown = true;
+					} else if (!open) {
+						spanDown = false;
+					}
+				}
+				x++;
+			}
+		}
+		ctx.putImageData(image, 0, 0);
+	}
+
 	function redrawAll() {
 		if (!ctx) return;
 		ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
 		for (const stroke of allStrokes) {
 			if (stroke.points.length === 0) continue;
+			if (stroke.fill) {
+				applyFill(toPixelPoint(stroke.points[0]), stroke.color);
+				continue;
+			}
 			if (stroke.points.length === 1) {
 				drawDot(toPixelPoint(stroke.points[0]), stroke);
 				continue;
@@ -180,13 +279,30 @@
 
 	function handlePointerDown(e: PointerEvent) {
 		if (e.button !== 0 && e.pointerType === 'mouse') return;
-		canvasEl.setPointerCapture(e.pointerId);
 		updateCursor(e);
 
 		const point = toNormalizedPoint(e.clientX, e.clientY);
 		// crypto.randomUUID() only exists in secure contexts (HTTPS/localhost),
 		// so it's undefined for a phone opening the dev server over http://<LAN-IP>.
 		const strokeId = `${selfId}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+
+		if (tool === 'bucket') {
+			const fillStroke: IStroke = {
+				id: strokeId,
+				playerId: selfId,
+				color,
+				width: 0,
+				fill: true,
+				points: [point]
+			};
+			allStrokes = [...allStrokes, fillStroke];
+			applyFill(toPixelPoint(point), color);
+			DrawingService.strokeStart(code, fillStroke);
+			DrawingService.strokeEnd(code, strokeId);
+			return;
+		}
+
+		canvasEl.setPointerCapture(e.pointerId);
 		const erasing = tool === 'eraser';
 		const stroke: IStroke = {
 			id: strokeId,
@@ -244,6 +360,10 @@
 
 	function onRemoteStrokeStart({ stroke }: { stroke: IStroke }) {
 		allStrokes = [...allStrokes, stroke];
+		if (stroke.fill) {
+			applyFill(toPixelPoint(stroke.points[0]), stroke.color);
+			return;
+		}
 		const lastNormalized = stroke.points[stroke.points.length - 1];
 		const pixelPoint = toPixelPoint(lastNormalized);
 		lastPoint.set(stroke.id, pixelPoint);
@@ -309,7 +429,23 @@
 			onpointercancel={handlePointerEnd}
 			onpointerleave={handlePointerLeave}
 		></canvas>
-		{#if cursor.visible}
+		{#if cursor.visible && tool === 'bucket'}
+			<!-- Tilted bucket pouring the chosen colour; the drip at its lower-left is the fill point (3, 25). -->
+			<svg
+				class="pointer-events-none absolute overflow-visible"
+				style="left: {cursor.x - 3}px; top: {cursor.y - 25}px; width: 28px; height: 28px;"
+				viewBox="0 0 28 28"
+				aria-hidden="true"
+			>
+				<g transform="rotate(-35 14 14)" stroke="#1f2937" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round">
+					<path d="M9 9 Q14 2 19 9" fill="none" />
+					<path d="M7 10 L21 10 L19 23 Q14 25 9 23 Z" fill="white" />
+					<ellipse cx="14" cy="10" rx="7" ry="2.2" fill={color} />
+				</g>
+				<path d="M3 15 Q1 20 3 22.5 Q5 20 3 15 Z" fill={color} stroke="#1f2937" stroke-width="1.2" stroke-linejoin="round" />
+				<circle cx="3" cy="25" r="2" fill={color} stroke="white" stroke-width="1" />
+			</svg>
+		{:else if cursor.visible}
 			<div
 				class="pointer-events-none absolute rounded-full"
 				style="left: {cursor.x - brushDiameter / 2}px; top: {cursor.y - brushDiameter / 2}px; width: {brushDiameter}px; height: {brushDiameter}px; border: 1.5px {tool ===

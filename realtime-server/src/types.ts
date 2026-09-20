@@ -71,5 +71,6 @@ export interface Stroke {
 	color: string;
 	width: number;
 	erase?: boolean;
+	fill?: boolean;
 	points: Point[];
 }

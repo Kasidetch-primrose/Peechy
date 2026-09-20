@@ -42,7 +42,10 @@ export interface IStroke {
 	// Eraser strokes are replayed in order like any other stroke, but
 	// punch through earlier ink instead of adding colour.
 	erase?: boolean;
+	// Bucket fill: a single point + colour. Every client re-runs the flood
+	// fill on its own canvas at that point in the stroke order.
+	fill?: boolean;
 	points: IPoint[];
 }
 
-export type DrawTool = 'pen' | 'eraser';
+export type DrawTool = 'pen' | 'eraser' | 'bucket';

@@ -150,6 +150,17 @@
 				>
 					🧽 ยางลบ
 				</button>
+				<button
+					type="button"
+					role="radio"
+					aria-checked={tool === 'bucket'}
+					onclick={() => (tool = 'bucket')}
+					class="rounded-full px-3 py-1 text-xs font-medium transition-colors {tool === 'bucket'
+						? 'bg-primary-500 text-white shadow-sm'
+						: 'text-gray-600 hover:bg-white'}"
+				>
+					🪣 ถังสี
+				</button>
 			</div>
 
 			<div class="flex items-center gap-2 {tool === 'eraser' ? 'opacity-40' : ''}">
@@ -159,9 +170,9 @@
 						aria-label="เลือกสี"
 						onclick={() => {
 							color = c;
-							tool = 'pen';
+							if (tool === 'eraser') tool = 'pen';
 						}}
-						class="h-7 w-7 rounded-full border-2 transition-transform {color === c && tool === 'pen'
+						class="h-7 w-7 rounded-full border-2 transition-transform {color === c && tool !== 'eraser'
 							? 'scale-110 border-primary-500'
 							: 'border-gray-200'}"
 						style="background-color: {c};"
@@ -170,14 +181,23 @@
 				<input
 					type="color"
 					bind:value={color}
-					oninput={() => (tool = 'pen')}
+					oninput={() => {
+						if (tool === 'eraser') tool = 'pen';
+					}}
 					class="h-7 w-7 cursor-pointer rounded-full border border-gray-200"
 				/>
 			</div>
 
-			<div class="flex items-center gap-2">
+			<div class="flex items-center gap-2 {tool === 'bucket' ? 'opacity-40' : ''}">
 				<span class="text-xs text-gray-400">{tool === 'eraser' ? 'ขนาดยางลบ' : 'ขนาดปากกา'}</span>
-				<input type="range" min="2" max="24" bind:value={strokeWidth} class="w-28 accent-primary-500" />
+				<input
+					type="range"
+					min="2"
+					max="24"
+					bind:value={strokeWidth}
+					disabled={tool === 'bucket'}
+					class="w-28 accent-primary-500"
+				/>
 				<span
 					class="inline-block rounded-full bg-gray-700"
 					style="width: {Math.min(strokeWidth, 20)}px; height: {Math.min(strokeWidth, 20)}px;"
