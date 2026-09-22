@@ -3,6 +3,7 @@
 	import { get } from 'svelte/store';
 	import { fade, fly, scale } from 'svelte/transition';
 	import { copyText } from '$lib/utils/clipboard';
+	import { uploadReferenceImage } from '$lib/utils/reference-image';
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
 	import { authUserStore } from '$lib/data/stores/authUser';
@@ -19,6 +20,80 @@
 	let showGuestModal = $state(false);
 	let canUndo = $state(false);
 	let showClearConfirm = $state(false);
+
+	// ── Shared trace image ─────────────────────────────────────────────────
+	let showRefPanel = $state(false);
+	let showRefDeleteConfirm = $state(false);
+	let refEditing = $state(false); // this player is positioning the image (drawing off for them only)
+	let uploading = $state(false);
+	let fileInput = $state<HTMLInputElement>();
+	let opacityDraft = $state<number | null>(null); // slider position while dragging it
+
+	const reference = $derived($drawingStore.reference);
+	const refController = $derived($drawingStore.refController);
+	const refBusyByOther = $derived(!!refController && refController.playerId !== selfId);
+	const refNotice = $derived($drawingStore.refNotice);
+
+	// Locked (trace mode), hidden or deleted images can't be positioned; picking a
+	// drawing tool also means "I want to draw now".
+	$effect(() => {
+		if (!reference || reference.locked || !reference.visible) refEditing = false;
+	});
+	$effect(() => {
+		void tool;
+		refEditing = false;
+	});
+	async function handleRefFile(e: Event) {
+		const input = e.currentTarget as HTMLInputElement;
+		const file = input.files?.[0];
+		input.value = ''; // let the same file be picked again later
+		if (!file) return;
+		uploading = true;
+		try {
+			const { url, aspect } = await uploadReferenceImage(file);
+			DrawingService.refAdd(code, url, aspect);
+			refEditing = true; // the uploader positions it first
+		} catch (err) {
+			showToast((err as Error).message);
+		} finally {
+			uploading = false;
+		}
+	}
+
+	let opacityTimer: ReturnType<typeof setTimeout> | undefined;
+	let pendingOpacity: number | null = null;
+	function sendOpacity(value: number) {
+		pendingOpacity = value;
+		if (opacityTimer) return; // at most one update per ~60ms while sliding
+		opacityTimer = setTimeout(() => {
+			opacityTimer = undefined;
+			if (pendingOpacity !== null) DrawingService.refPatch(code, { opacity: pendingOpacity });
+			pendingOpacity = null;
+		}, 60);
+	}
+	function commitOpacity() {
+		clearTimeout(opacityTimer);
+		opacityTimer = undefined;
+		if (pendingOpacity !== null) DrawingService.refPatch(code, { opacity: pendingOpacity });
+		pendingOpacity = null;
+		opacityDraft = null;
+	}
+
+	function confirmDeleteReference() {
+		showRefDeleteConfirm = false;
+		DrawingService.refDelete(code);
+	}
+
+	const refNoticeText = $derived.by(() => {
+		if (!refNotice) return '';
+		if (refNotice.reason === 'busy') return `${refNotice.byName ?? 'เพื่อน'} กำลังจัดรูปอยู่`;
+		if (refNotice.reason === 'locked') return '🔒 รูปต้นแบบถูกล็อกอยู่ ปลดล็อกก่อนถึงจะแก้ได้';
+		return 'รูปนี้ใช้ไม่ได้';
+	});
+	// The server refused an edit (someone else is dragging / image is locked).
+	$effect(() => {
+		if (refNotice) showToast(refNoticeText);
+	});
 
 	// Someone else's vote started while this dialog was open — it's moot now.
 	$effect(() => {
@@ -211,6 +286,39 @@
 	</div>
 {/if}
 
+{#if showRefDeleteConfirm}
+	<div
+		transition:fade={{ duration: motion(180) }}
+		class="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm"
+		role="dialog"
+		aria-modal="true"
+	>
+		<div
+			transition:scale={{ start: 0.94, duration: motion(200) }}
+			class="mx-4 w-full max-w-[26rem] rounded-2xl bg-white p-6 shadow-xl"
+		>
+			<h3 class="text-base font-semibold text-gray-900">ลบรูปต้นแบบ?</h3>
+			<p class="mt-1 text-sm text-gray-500">รูปนี้จะหายไปจากหน้าจอของทุกคนในห้อง (เส้นที่วาดไว้แล้วไม่ถูกลบ)</p>
+			<div class="mt-5 flex gap-3">
+				<button
+					type="button"
+					onclick={() => (showRefDeleteConfirm = false)}
+					class="flex-1 cursor-pointer rounded-xl border border-gray-200 py-2 text-sm font-medium text-gray-700 transition-all hover:border-gray-300 hover:bg-gray-100 active:scale-95"
+				>
+					ยกเลิก
+				</button>
+				<button
+					type="button"
+					onclick={confirmDeleteReference}
+					class="flex-1 cursor-pointer rounded-xl bg-red-500 py-2 text-sm font-semibold text-white transition-all hover:bg-red-400 hover:shadow-md active:scale-95"
+				>
+					ลบรูป
+				</button>
+			</div>
+		</div>
+	</div>
+{/if}
+
 {#if showClearConfirm}
 	<div
 		transition:fade={{ duration: motion(180) }}
@@ -360,6 +468,9 @@
 					{strokeWidth}
 					bind:canUndo
 					syncVersion={$drawingStore.syncVersion}
+					{reference}
+					{refController}
+					{refEditing}
 				/>
 			{/if}
 		</div>
@@ -440,6 +551,142 @@
 					class="inline-block rounded-full bg-gray-700"
 					style="width: {Math.min(strokeWidth, 20)}px; height: {Math.min(strokeWidth, 20)}px;"
 				></span>
+			</div>
+
+			<!-- Shared trace image controls -->
+			<div class="relative">
+				<button
+					type="button"
+					onclick={() => (showRefPanel = !showRefPanel)}
+					aria-expanded={showRefPanel}
+					class="flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-all active:scale-95 {showRefPanel
+						? 'border-primary-500 bg-primary-100/60 text-primary-600'
+						: 'border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-100'}"
+				>
+					🖼 รูปต้นแบบ
+					{#if reference}
+						<span class="text-[10px]">{reference.locked ? '🔒' : '●'}</span>
+					{/if}
+				</button>
+
+				{#if showRefPanel}
+					<div
+						transition:fly={{ y: 10, duration: motion(180) }}
+						class="absolute right-0 bottom-full z-40 mb-2 w-[min(19rem,calc(100vw-1.5rem))] rounded-2xl border border-primary-100 bg-white p-4 shadow-xl"
+					>
+						<input
+							bind:this={fileInput}
+							type="file"
+							accept="image/png,image/jpeg,image/webp"
+							class="hidden"
+							onchange={handleRefFile}
+						/>
+
+						{#if !reference}
+							<p class="text-sm font-semibold text-gray-900">รูปต้นแบบสำหรับ trace</p>
+							<p class="mt-1 text-xs text-gray-500">
+								เลือกรูปมาวางใต้เส้นวาด ปรับความจางแล้ววาดทับได้ ทุกคนในห้องเห็นและจัดรูปได้พร้อมกัน
+								(รูปไม่ถูกนับรวมในไฟล์ที่บันทึก)
+							</p>
+							<button
+								type="button"
+								onclick={() => fileInput?.click()}
+								disabled={uploading}
+								class="mt-3 w-full rounded-xl bg-primary-500 py-2 text-sm font-semibold text-white transition-all hover:bg-primary-400 active:scale-95 disabled:cursor-not-allowed disabled:bg-btn-primary-disabled"
+							>
+								{uploading ? 'กำลังอัปโหลด...' : '＋ เลือกรูป'}
+							</button>
+						{:else}
+							<div class="flex items-center justify-between gap-2">
+								<p class="text-sm font-semibold text-gray-900">รูปต้นแบบ</p>
+								{#if reference.locked}
+									<span class="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700">
+										🔒 โหมด Trace
+									</span>
+								{/if}
+							</div>
+
+							<label class="mt-3 block">
+								<span class="flex items-center justify-between text-xs text-gray-500">
+									ความทึบของรูป
+									<span class="font-medium text-gray-700">
+										{Math.round((opacityDraft ?? reference.opacity) * 100)}%
+									</span>
+								</span>
+								<input
+									type="range"
+									min="5"
+									max="100"
+									step="1"
+									value={Math.round((opacityDraft ?? reference.opacity) * 100)}
+									oninput={(e) => {
+										opacityDraft = Number(e.currentTarget.value) / 100;
+										sendOpacity(opacityDraft);
+									}}
+									onchange={commitOpacity}
+									class="mt-1 w-full cursor-pointer accent-primary-500"
+								/>
+							</label>
+
+							<div class="mt-3 grid grid-cols-2 gap-2">
+								<button
+									type="button"
+									onclick={() => (refEditing = !refEditing)}
+									disabled={reference.locked || !reference.visible || refBusyByOther}
+									title={reference.locked ? 'ปลดล็อกก่อนถึงจะจัดตำแหน่งได้' : ''}
+									class="rounded-xl border px-2 py-2 text-xs font-medium transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 {refEditing
+										? 'border-primary-500 bg-primary-500 text-white hover:bg-primary-400'
+										: 'border-gray-200 text-gray-700 hover:border-gray-300 hover:bg-gray-100'}"
+								>
+									{refEditing ? '✓ เสร็จ (กลับไปวาด)' : '✥ จัดตำแหน่ง'}
+								</button>
+								<button
+									type="button"
+									onclick={() => DrawingService.refPatch(code, { locked: !reference.locked })}
+									class="rounded-xl border px-2 py-2 text-xs font-medium transition-all active:scale-95 {reference.locked
+										? 'border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100'
+										: 'border-gray-200 text-gray-700 hover:border-gray-300 hover:bg-gray-100'}"
+								>
+									{reference.locked ? '🔓 ปลดล็อก' : '🔒 ล็อก (Trace)'}
+								</button>
+								<button
+									type="button"
+									onclick={() => DrawingService.refPatch(code, { visible: !reference.visible })}
+									class="rounded-xl border border-gray-200 px-2 py-2 text-xs font-medium text-gray-700 transition-all hover:border-gray-300 hover:bg-gray-100 active:scale-95"
+								>
+									{reference.visible ? '🙈 ซ่อนรูป' : '👁 แสดงรูป'}
+								</button>
+								<button
+									type="button"
+									onclick={() => fileInput?.click()}
+									disabled={uploading || reference.locked || refBusyByOther}
+									class="rounded-xl border border-gray-200 px-2 py-2 text-xs font-medium text-gray-700 transition-all hover:border-gray-300 hover:bg-gray-100 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
+								>
+									{uploading ? 'กำลังอัปโหลด...' : '🔄 เปลี่ยนรูป'}
+								</button>
+							</div>
+
+							<button
+								type="button"
+								onclick={() => (showRefDeleteConfirm = true)}
+								disabled={reference.locked || refBusyByOther}
+								class="mt-2 w-full rounded-xl border border-red-200 py-2 text-xs font-medium text-red-500 transition-all hover:border-red-300 hover:bg-red-50 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+							>
+								🗑 ลบรูปต้นแบบ
+							</button>
+
+							<p class="mt-2 text-[11px] leading-snug text-gray-400">
+								{#if reference.locked}
+									ล็อกอยู่: ทุกคนวาดทับได้ แต่ขยับ/ย่อขยาย/ลบรูปไม่ได้ (ปรับความทึบและซ่อนได้)
+								{:else if refBusyByOther}
+									{refController?.name ?? 'เพื่อน'} กำลังจัดรูปอยู่ รอสักครู่
+								{:else}
+									กด "จัดตำแหน่ง" แล้วลากรูป/ลากมุมเพื่อย่อขยาย จากนั้นกด "ล็อก" เพื่อเริ่ม trace
+								{/if}
+							</p>
+						{/if}
+					</div>
+				{/if}
 			</div>
 		</div>
 	</div>

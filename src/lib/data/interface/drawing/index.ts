@@ -50,6 +50,29 @@ export interface IStroke {
 
 export type DrawTool = 'pen' | 'eraser' | 'bucket';
 
+// The shared trace image under the drawing. x/y (top-left) and width are
+// fractions (0..1) of the paper's width/height, so it sits in the same place
+// on every screen; height follows from `aspect` (natural width / height).
+export interface IDrawReference {
+	id: string;
+	url: string;
+	x: number;
+	y: number;
+	width: number;
+	aspect: number;
+	opacity: number;
+	locked: boolean; // static / trace mode — nobody can move, resize or replace it
+	visible: boolean;
+}
+
+// Who is currently moving/resizing the reference (only one person at a time).
+export interface IRefController {
+	playerId: string;
+	name: string;
+}
+
+export type RefDeniedReason = 'locked' | 'busy' | 'invalid';
+
 // A room-wide vote to clear the canvas. votes: playerId -> true (yes) /
 // null (hasn't answered). The starter is always true.
 export interface IClearVote {

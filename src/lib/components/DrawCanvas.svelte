@@ -6,7 +6,9 @@
 		DRAW_RATIO_VALUE,
 		type DrawRatio,
 		type DrawTool,
+		type IDrawReference,
 		type IPoint,
+		type IRefController,
 		type IStroke
 	} from '$lib/data/interface/drawing';
 
@@ -22,6 +24,11 @@
 		canUndo?: boolean;
 		// Changes when the parent has replaced initialStrokes (reconnect re-sync).
 		syncVersion?: number;
+		// The shared trace image drawn under the strokes, and who (if anyone) is moving it.
+		reference?: IDrawReference | null;
+		refController?: IRefController | null;
+		// This player is positioning the image: drawing is off, drag handles are on.
+		refEditing?: boolean;
 	}
 
 	let {
@@ -33,7 +40,10 @@
 		color,
 		strokeWidth,
 		canUndo = $bindable(false),
-		syncVersion = 0
+		syncVersion = 0,
+		reference = null,
+		refController = null,
+		refEditing = false
 	}: Props = $props();
 
 	// The eraser is easier to use with a wider tip than the pen at the same slider value.
@@ -516,6 +526,125 @@
 		redrawAll();
 	}
 
+	// ── Shared trace image: move / resize ────────────────────────────────────
+	// While dragging, the image follows the pointer locally (dragRef) and the
+	// position is relayed to the room once per frame. The server only accepts
+	// moves from whoever holds control, so this is optimistic: if someone else
+	// already has it, the effect below drops the local drag.
+	type Corner = 'nw' | 'ne' | 'sw' | 'se';
+	let dragRef = $state<IDrawReference | null>(null);
+	const shownRef = $derived(dragRef ?? reference);
+	const editingActive = $derived(refEditing && !!reference && reference.visible && !reference.locked);
+	const someoneElseControls = $derived(!!refController && refController.playerId !== selfId);
+	const CORNERS: { id: Corner; classes: string }[] = [
+		{ id: 'nw', classes: 'top-0 left-0 -translate-x-1/2 -translate-y-1/2 cursor-nwse-resize' },
+		{ id: 'ne', classes: 'top-0 right-0 translate-x-1/2 -translate-y-1/2 cursor-nesw-resize' },
+		{ id: 'sw', classes: 'bottom-0 left-0 -translate-x-1/2 translate-y-1/2 cursor-nesw-resize' },
+		{ id: 'se', classes: 'right-0 bottom-0 translate-x-1/2 translate-y-1/2 cursor-nwse-resize' }
+	];
+
+	let refDrag: {
+		pointerId: number;
+		kind: 'move' | Corner;
+		start: IDrawReference;
+		startPx: number;
+		startPy: number;
+	} | null = null;
+	let refPending: IDrawReference | null = null;
+	let refRaf: number | null = null;
+
+	function paperPointer(e: PointerEvent) {
+		const rect = canvasEl.getBoundingClientRect();
+		return {
+			px: (e.clientX - rect.left) / rect.width,
+			py: (e.clientY - rect.top) / rect.height,
+			ratio: rect.width / rect.height // paper width / height, to turn width into height
+		};
+	}
+
+	const clampNum = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
+
+	function beginRefDrag(e: PointerEvent, kind: 'move' | Corner) {
+		if (!reference || refDrag || someoneElseControls) return;
+		if (e.pointerType === 'mouse' && e.button !== 0) return;
+		e.preventDefault();
+		e.stopPropagation();
+		(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+		const { px, py } = paperPointer(e);
+		refDrag = { pointerId: e.pointerId, kind, start: { ...reference }, startPx: px, startPy: py };
+		dragRef = { ...reference };
+		DrawingService.refGrab(code);
+	}
+
+	function moveRefDrag(e: PointerEvent) {
+		if (!refDrag || e.pointerId !== refDrag.pointerId) return;
+		const { px, py, ratio: paperRatio } = paperPointer(e);
+		const s = refDrag.start;
+		let next: IDrawReference;
+
+		if (refDrag.kind === 'move') {
+			next = { ...s, x: s.x + (px - refDrag.startPx), y: s.y + (py - refDrag.startPy) };
+		} else {
+			// The corner opposite the dragged one stays put; aspect ratio is preserved.
+			const west = refDrag.kind.endsWith('w');
+			const north = refDrag.kind.startsWith('n');
+			const startHeight = (s.width * paperRatio) / s.aspect;
+			const fixedX = west ? s.x + s.width : s.x;
+			const fixedY = north ? s.y + startHeight : s.y;
+			const width = clampNum(west ? fixedX - px : px - fixedX, 0.05, 1.5);
+			const height = (width * paperRatio) / s.aspect;
+			next = { ...s, width, x: west ? fixedX - width : fixedX, y: north ? fixedY - height : fixedY };
+		}
+
+		// Same limits as the server so the image never visibly jumps back.
+		const height = (next.width * paperRatio) / next.aspect;
+		next.x = clampNum(next.x, -next.width + 0.1, 0.9);
+		next.y = clampNum(next.y, -height + 0.1, 0.9);
+
+		dragRef = next;
+		refPending = next;
+		if (refRaf === null) {
+			refRaf = requestAnimationFrame(() => {
+				refRaf = null;
+				flushRefMove();
+			});
+		}
+	}
+
+	function flushRefMove() {
+		if (!refPending) return;
+		DrawingService.refMove(code, refPending.x, refPending.y, refPending.width);
+		refPending = null;
+	}
+
+	function endRefDrag(e: PointerEvent) {
+		if (!refDrag || e.pointerId !== refDrag.pointerId) return;
+		flushRefMove();
+		refDrag = null;
+		DrawingService.refRelease(code);
+		// Keep showing the dropped position until the server's final state arrives.
+		setTimeout(() => {
+			if (!refDrag) dragRef = null;
+		}, 1200);
+	}
+
+	function abortRefDrag() {
+		if (refRaf !== null) cancelAnimationFrame(refRaf);
+		refRaf = null;
+		refPending = null;
+		refDrag = null;
+		dragRef = null;
+	}
+
+	// The server's authoritative state arrived (or the drag can no longer continue).
+	$effect(() => {
+		void reference;
+		if (!refDrag) dragRef = null;
+	});
+	$effect(() => {
+		if (refDrag && (someoneElseControls || !editingActive)) abortRefDrag();
+	});
+
 	onMount(() => {
 		allStrokes = [...initialStrokes];
 		syncCanUndo();
@@ -548,10 +677,22 @@
 		class="relative overflow-hidden rounded-xl border border-primary-200 bg-white shadow-md"
 		style="width: {paperSize.width}px; height: {paperSize.height}px;"
 	>
+		<!-- Trace image: its own layer under the drawing, so strokes (and the eraser) never touch it. -->
+		{#if shownRef && shownRef.visible}
+			<img
+				src={shownRef.url}
+				alt=""
+				draggable="false"
+				class="pointer-events-none absolute z-0 max-w-none select-none"
+				style="left: {shownRef.x * 100}%; top: {shownRef.y * 100}%; width: {shownRef.width * 100}%; opacity: {shownRef.opacity};"
+			/>
+		{/if}
 		<canvas
 			bind:this={canvasEl}
-			class="block h-full w-full cursor-none select-none"
-			style="touch-action: pinch-zoom; -webkit-touch-callout: none; -webkit-user-select: none;"
+			class="relative z-[1] block h-full w-full cursor-none select-none"
+			style="touch-action: pinch-zoom; -webkit-touch-callout: none; -webkit-user-select: none; pointer-events: {editingActive
+				? 'none'
+				: 'auto'};"
 			oncontextmenu={(e) => e.preventDefault()}
 			onpointerdown={handlePointerDown}
 			onpointermove={handlePointerMove}
@@ -559,10 +700,38 @@
 			onpointercancel={handlePointerEnd}
 			onpointerleave={handlePointerLeave}
 		></canvas>
-		{#if cursor.visible && tool === 'bucket'}
+		<!-- Edit mode: the image (not the canvas) receives the pointer, with resize handles. -->
+		{#if editingActive && shownRef}
+			<div
+				class="absolute z-10 cursor-move border-2 border-dashed {someoneElseControls
+					? 'pointer-events-none border-amber-400'
+					: 'border-primary-500'}"
+				style="left: {shownRef.x * 100}%; top: {shownRef.y * 100}%; width: {shownRef.width * 100}%; aspect-ratio: {shownRef.aspect}; touch-action: none;"
+				role="presentation"
+				onpointerdown={(e) => beginRefDrag(e, 'move')}
+				onpointermove={moveRefDrag}
+				onpointerup={endRefDrag}
+				onpointercancel={endRefDrag}
+			>
+				{#if someoneElseControls}
+					<span class="absolute top-1 left-1 rounded bg-amber-400/90 px-2 py-0.5 text-[10px] font-medium text-gray-900">
+						{refController?.name ?? 'เพื่อน'} กำลังจัดรูป
+					</span>
+				{:else}
+					{#each CORNERS as corner (corner.id)}
+						<span
+							class="absolute h-6 w-6 rounded-full border-2 border-white bg-primary-500 shadow-md {corner.classes}"
+							role="presentation"
+							onpointerdown={(e) => beginRefDrag(e, corner.id)}
+						></span>
+					{/each}
+				{/if}
+			</div>
+		{/if}
+		{#if cursor.visible && !editingActive && tool === 'bucket'}
 			<!-- Tilted bucket pouring the chosen colour; the drip at its lower-left is the fill point (3, 25). -->
 			<svg
-				class="pointer-events-none absolute overflow-visible"
+				class="pointer-events-none absolute z-20 overflow-visible"
 				style="left: {cursor.x - 3}px; top: {cursor.y - 25}px; width: 28px; height: 28px;"
 				viewBox="0 0 28 28"
 				aria-hidden="true"
@@ -575,9 +744,9 @@
 				<path d="M3 15 Q1 20 3 22.5 Q5 20 3 15 Z" fill={color} stroke="#1f2937" stroke-width="1.2" stroke-linejoin="round" />
 				<circle cx="3" cy="25" r="2" fill={color} stroke="white" stroke-width="1" />
 			</svg>
-		{:else if cursor.visible}
+		{:else if cursor.visible && !editingActive}
 			<div
-				class="pointer-events-none absolute rounded-full"
+				class="pointer-events-none absolute z-20 rounded-full"
 				style="left: {cursor.x - brushDiameter / 2}px; top: {cursor.y - brushDiameter / 2}px; width: {brushDiameter}px; height: {brushDiameter}px; border: 1.5px {tool ===
 				'eraser'
 					? 'dashed'

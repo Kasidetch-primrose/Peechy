@@ -7,8 +7,11 @@ import type {
 	IClearNotice,
 	IClearVote,
 	IDrawPlayer,
+	IDrawReference,
 	IDrawRoom,
-	IStroke
+	IRefController,
+	IStroke,
+	RefDeniedReason
 } from '$lib/data/interface/drawing';
 
 interface DrawingState {
@@ -27,6 +30,9 @@ interface DrawingState {
 	clearVote: IClearVote | null;
 	clearNotice: IClearNotice | null; // outcome of the last vote, shown briefly
 	clearCooldownUntil: number; // epoch ms; no new vote can start before this
+	reference: IDrawReference | null; // the shared trace image, if any
+	refController: IRefController | null; // who is moving/resizing it right now
+	refNotice: { id: number; reason: RefDeniedReason; byName?: string } | null;
 }
 
 const initial: DrawingState = {
@@ -39,7 +45,10 @@ const initial: DrawingState = {
 	syncVersion: 0,
 	clearVote: null,
 	clearNotice: null,
-	clearCooldownUntil: 0
+	clearCooldownUntil: 0,
+	reference: null,
+	refController: null,
+	refNotice: null
 };
 
 export const drawingStore = writable<DrawingState>({ ...initial });
@@ -78,7 +87,9 @@ export async function joinRoom(code: string): Promise<boolean> {
 		...s,
 		room: res.room!,
 		players: res.players ?? [],
-		initialStrokes: res.strokes ?? []
+		initialStrokes: res.strokes ?? [],
+		reference: res.reference ?? null,
+		refController: res.referenceController ?? null
 	}));
 	return true;
 }
@@ -101,7 +112,9 @@ async function resyncAfterReconnect(code: string) {
 		players: res.players ?? s.players,
 		initialStrokes: res.strokes ?? [],
 		syncVersion: s.syncVersion + 1,
-		clearVote: null
+		clearVote: null,
+		reference: res.reference ?? null,
+		refController: res.referenceController ?? null
 	}));
 }
 
@@ -169,6 +182,27 @@ function _bindEvents() {
 			},
 			retryAt ? { clearCooldownUntil: retryAt } : {}
 		);
+	});
+
+	socket.on('draw:ref:state', ({ reference }: { reference: IDrawReference | null }) => {
+		// Deleting the image also ends any drag on it.
+		drawingStore.update((s) => ({
+			...s,
+			reference,
+			refController: reference ? s.refController : null
+		}));
+	});
+
+	socket.on('draw:ref:control', ({ controller }: { controller: IRefController | null }) => {
+		drawingStore.update((s) => ({ ...s, refController: controller }));
+	});
+
+	socket.on('draw:ref:denied', ({ reason, byName }: { reason: RefDeniedReason; byName?: string }) => {
+		const notice = { id: Date.now(), reason, byName };
+		drawingStore.update((s) => ({ ...s, refNotice: notice }));
+		setTimeout(() => {
+			drawingStore.update((s) => (s.refNotice?.id === notice.id ? { ...s, refNotice: null } : s));
+		}, 3000);
 	});
 
 	socket.on('draw:room:playerLeft', ({ playerId }: { playerId: string }) => {

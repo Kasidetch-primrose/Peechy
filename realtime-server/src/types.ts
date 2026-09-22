@@ -69,6 +69,22 @@ export interface DrawRoomState {
 	createdAt: number;
 }
 
+// The shared "trace" image under the drawing. x/y are the top-left corner and
+// width is the image width, all as fractions (0..1) of the paper's width/height
+// so it lands in the same place on every screen. Height is derived from
+// `aspect` (natural width / height), so the image can never be distorted.
+export interface DrawReference {
+	id: string;
+	url: string;
+	x: number;
+	y: number;
+	width: number;
+	aspect: number;
+	opacity: number;
+	locked: boolean; // static/trace mode: nobody can move, resize or replace it
+	visible: boolean;
+}
+
 export interface Point {
 	x: number;
 	y: number;

@@ -1,5 +1,13 @@
 import MultiplayerService from './index';
-import type { DrawRatio, IDrawPlayer, IDrawRoom, IPoint, IStroke } from '$lib/data/interface/drawing';
+import type {
+	DrawRatio,
+	IDrawPlayer,
+	IDrawReference,
+	IDrawRoom,
+	IPoint,
+	IRefController,
+	IStroke
+} from '$lib/data/interface/drawing';
 
 interface CreateAck {
 	ok: boolean;
@@ -13,6 +21,8 @@ interface JoinAck {
 	room?: IDrawRoom;
 	players?: IDrawPlayer[];
 	strokes?: IStroke[];
+	reference?: IDrawReference | null;
+	referenceController?: IRefController | null;
 }
 
 export default class DrawingService {
@@ -46,6 +56,33 @@ export default class DrawingService {
 
 	static undo(code: string): void {
 		MultiplayerService.getSocket().emit('draw:undo', { code });
+	}
+
+	static refAdd(code: string, url: string, aspect: number): void {
+		MultiplayerService.getSocket().emit('draw:ref:add', { code, url, aspect });
+	}
+
+	static refPatch(
+		code: string,
+		patch: { opacity?: number; locked?: boolean; visible?: boolean }
+	): void {
+		MultiplayerService.getSocket().emit('draw:ref:patch', { code, patch });
+	}
+
+	static refGrab(code: string): void {
+		MultiplayerService.getSocket().emit('draw:ref:grab', { code });
+	}
+
+	static refMove(code: string, x: number, y: number, width: number): void {
+		MultiplayerService.getSocket().emit('draw:ref:move', { code, x, y, width });
+	}
+
+	static refRelease(code: string): void {
+		MultiplayerService.getSocket().emit('draw:ref:release', { code });
+	}
+
+	static refDelete(code: string): void {
+		MultiplayerService.getSocket().emit('draw:ref:delete', { code });
 	}
 
 	static requestClear(code: string): void {

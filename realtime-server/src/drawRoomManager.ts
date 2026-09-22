@@ -1,5 +1,11 @@
 import { redis, ROOM_TTL_SEC } from './redis.js';
-import { DRAW_RATIOS, type DrawPlayer, type DrawRatio, type DrawRoomState } from './types.js';
+import {
+	DRAW_RATIOS,
+	type DrawPlayer,
+	type DrawRatio,
+	type DrawReference,
+	type DrawRoomState
+} from './types.js';
 
 function roomKey(code: string) {
 	return `draw:room:${code}`;
@@ -69,6 +75,24 @@ export async function setPlayer(code: string, player: DrawPlayer): Promise<void>
 export async function getAllPlayers(code: string): Promise<DrawPlayer[]> {
 	const raw = await redis.hgetall(playersKey(code));
 	return Object.values(raw).map((value) => JSON.parse(value));
+}
+
+// The trace image lives in the room hash so it survives a server restart
+// (like the room itself), unlike strokes which are memory-only.
+export async function getReference(code: string): Promise<DrawReference | null> {
+	const raw = await redis.hget(roomKey(code), 'reference');
+	if (!raw) return null;
+	try {
+		return JSON.parse(raw) as DrawReference;
+	} catch {
+		return null;
+	}
+}
+
+export async function setReference(code: string, reference: DrawReference | null): Promise<void> {
+	if (reference) await redis.hset(roomKey(code), 'reference', JSON.stringify(reference));
+	else await redis.hdel(roomKey(code), 'reference');
+	await touch(code);
 }
 
 export async function removePlayer(code: string, playerId: string): Promise<void> {

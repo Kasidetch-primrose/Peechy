@@ -119,7 +119,14 @@ io.on('connection', (socket) => {
 			socket.join(`draw:${code}`);
 			const player = result.players.find((p) => p.id === playerId);
 			if (player) io.to(`draw:${code}`).emit('draw:room:playerJoined', { player });
-			callback?.({ ok: true, room: result.room, players: result.players, strokes: result.strokes });
+			callback?.({
+				ok: true,
+				room: result.room,
+				players: result.players,
+				strokes: result.strokes,
+				reference: result.reference,
+				referenceController: result.referenceController
+			});
 		} catch (e) {
 			callback?.({ ok: false, message: (e as Error).message });
 		}
@@ -154,6 +161,45 @@ io.on('connection', (socket) => {
 	socket.on('draw:stroke:end', ({ code, strokeId }: { code: string; strokeId: string }) => {
 		if (!inDrawRoom(code)) return;
 		socket.to(`draw:${code}`).emit('draw:stroke:end', { strokeId });
+	});
+
+	// Shared trace image (see draw.ts). Position/size are relayed live to the
+	// others while someone holds control; everything else is broadcast to all.
+	socket.on('draw:ref:add', async ({ code, url, aspect }: { code: string; url: unknown; aspect: unknown }) => {
+		if (!inDrawRoom(code)) return;
+		await draw.addReference(io, code, playerId, { url, aspect });
+	});
+
+	socket.on(
+		'draw:ref:patch',
+		async ({ code, patch }: { code: string; patch: { opacity?: unknown; locked?: unknown; visible?: unknown } }) => {
+			if (!inDrawRoom(code)) return;
+			await draw.patchReference(io, code, playerId, patch ?? {});
+		}
+	);
+
+	socket.on('draw:ref:grab', async ({ code }: { code: string }) => {
+		if (!inDrawRoom(code)) return;
+		await draw.grabReference(io, code, playerId, playerName);
+	});
+
+	socket.on(
+		'draw:ref:move',
+		({ code, x, y, width }: { code: string; x: unknown; y: unknown; width: unknown }) => {
+			if (!inDrawRoom(code)) return;
+			const reference = draw.moveReference(code, playerId, { x, y, width });
+			if (reference) socket.to(`draw:${code}`).emit('draw:ref:state', { reference });
+		}
+	);
+
+	socket.on('draw:ref:release', async ({ code }: { code: string }) => {
+		if (!inDrawRoom(code)) return;
+		await draw.releaseReference(io, code, playerId);
+	});
+
+	socket.on('draw:ref:delete', async ({ code }: { code: string }) => {
+		if (!inDrawRoom(code)) return;
+		await draw.deleteReference(io, code, playerId);
 	});
 
 	// Clearing the canvas is a room vote (see draw.ts); there is no direct clear.
