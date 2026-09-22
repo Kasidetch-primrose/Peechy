@@ -11,49 +11,65 @@
 		difficultyBg
 	} from '$lib/data/stores/game-detail';
 	import { authUserStore } from '$lib/data/stores/authUser';
-	import { connect, createRoom } from '$lib/data/stores/multiplayer';
-	import type { TurnDuration } from '$lib/data/interface/multiplayer';
-	import { saveGuestName, getGuestId, type PlayerIdentity } from '$lib/utils/guest-identity';
-	import GuestNameModal from '$lib/components/GuestNameModal.svelte';
+	// ── "เล่นหลายคน" (create multiplayer room) logic — commented out while
+	// realtime-server (Railway) is offline. To restore: uncomment this import
+	// block, the state + functions block below, and swap the disabled button +
+	// toast markup back to the original modal-opening button and modal (see
+	// matching comments further down). See memory:
+	// peechy-multiplayer-temporarily-disabled for the full picture.
+	// import { connect, createRoom } from '$lib/data/stores/multiplayer';
+	// import type { TurnDuration } from '$lib/data/interface/multiplayer';
+	// import { saveGuestName, getGuestId, type PlayerIdentity } from '$lib/utils/guest-identity';
+	// import GuestNameModal from '$lib/components/GuestNameModal.svelte';
 
 	let confirmDelete = $state(false);
 	let deleting = $state(false);
 	let deleteError = $state('');
 
-	let showMultiplayerModal = $state(false);
-	let turnDuration = $state<TurnDuration>(30);
-	let creatingRoom = $state(false);
-	let createRoomError = $state('');
-	let showGuestModal = $state(false);
+	// let showMultiplayerModal = $state(false);
+	// let turnDuration = $state<TurnDuration>(30);
+	// let creatingRoom = $state(false);
+	// let createRoomError = $state('');
+	// let showGuestModal = $state(false);
 
-	async function proceedCreateRoom(identity: PlayerIdentity) {
-		const id = $gameDetailStore.game?.id;
-		if (!id) return;
-		creatingRoom = true;
-		createRoomError = '';
-		connect(identity.id, identity.name);
-		const code = await createRoom(id, turnDuration);
-		creatingRoom = false;
-		if (!code) {
-			createRoomError = 'สร้างห้องไม่สำเร็จ ลองอีกครั้ง';
-			return;
-		}
-		goto(`/game/multiplayer/lobby/${code}`);
-	}
+	// async function proceedCreateRoom(identity: PlayerIdentity) {
+	// 	const id = $gameDetailStore.game?.id;
+	// 	if (!id) return;
+	// 	creatingRoom = true;
+	// 	createRoomError = '';
+	// 	connect(identity.id, identity.name);
+	// 	const code = await createRoom(id, turnDuration);
+	// 	creatingRoom = false;
+	// 	if (!code) {
+	// 		createRoomError = 'สร้างห้องไม่สำเร็จ ลองอีกครั้ง';
+	// 		return;
+	// 	}
+	// 	goto(`/game/multiplayer/lobby/${code}`);
+	// }
 
-	async function handleCreateRoom() {
-		const user = $authUserStore.user;
-		if (user) {
-			await proceedCreateRoom({ id: String(user.id), name: user.username });
-			return;
-		}
-		// Guests are always prompted for a nickname, even if they've played before.
-		showGuestModal = true;
-	}
+	// async function handleCreateRoom() {
+	// 	const user = $authUserStore.user;
+	// 	if (user) {
+	// 		await proceedCreateRoom({ id: String(user.id), name: user.username });
+	// 		return;
+	// 	}
+	// 	// Guests are always prompted for a nickname, even if they've played before.
+	// 	showGuestModal = true;
+	// }
 
-	function handleGuestConfirm(name: string) {
-		saveGuestName(name);
-		proceedCreateRoom({ id: getGuestId(), name });
+	// function handleGuestConfirm(name: string) {
+	// 	saveGuestName(name);
+	// 	proceedCreateRoom({ id: getGuestId(), name });
+	// }
+
+	// Multiplayer backend is offline (Railway trial expired) — "เล่นหลายคน"
+	// just surfaces this message instead of opening the room-creation modal.
+	let toast = $state<string | null>(null);
+	let toastTimer: ReturnType<typeof setTimeout> | undefined;
+	function showComingSoonToast() {
+		toast = '🚧 ฟีเจอร์นี้อยู่ระหว่างการพัฒนา จะพร้อมใช้งานเร็วๆ นี้';
+		clearTimeout(toastTimer);
+		toastTimer = setTimeout(() => (toast = null), 2500);
 	}
 
 	async function handleDelete() {
@@ -358,6 +374,9 @@
 				>
 					{images.length === 0 ? 'ยังไม่มีรูปภาพ' : '▶ เริ่มเล่น'}
 				</button>
+				<!-- Original "เล่นหลายคน" button opened showMultiplayerModal — commented
+				     out below, replaced by the disabled/toast version while the
+				     realtime-server backend is offline.
 				<button
 					onclick={() => {
 						showMultiplayerModal = true;
@@ -368,13 +387,22 @@
 				>
 					👥 เล่นหลายคน
 				</button>
+				-->
+				<button
+					onclick={showComingSoonToast}
+					class="rounded-xl bg-secondary-lavender/50 px-8 py-3 text-base font-semibold text-white/80 shadow-sm transition-colors hover:brightness-95 active:scale-95"
+				>
+					👥 เล่นหลายคน
+				</button>
 			</div>
 		</div>
 		<!-- </div> -->
 	</div>
 {/if}
 
-<!-- Multiplayer room creation modal -->
+<!-- Multiplayer room creation modal — commented out while realtime-server is
+     offline. Restore by uncommenting this block along with the state/logic
+     and the original button above.
 {#if showMultiplayerModal}
 	<div
 		class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm"
@@ -423,6 +451,7 @@
 		</div>
 	</div>
 {/if}
+-->
 
 <!-- Delete confirmation modal -->
 {#if confirmDelete}
@@ -465,8 +494,20 @@
 	</div>
 {/if}
 
+{#if toast}
+	<div
+		class="pointer-events-none fixed top-20 left-1/2 z-[80] -translate-x-1/2 rounded-2xl bg-gray-900/90 px-4 py-3 text-center text-sm text-white shadow-xl"
+		role="status"
+	>
+		{toast}
+	</div>
+{/if}
+
+<!-- Original guest-nickname modal for room creation — commented out with the
+     rest of the multiplayer logic above.
 <GuestNameModal
 	bind:open={showGuestModal}
 	onConfirm={handleGuestConfirm}
 	onCancel={() => (showGuestModal = false)}
 />
+-->

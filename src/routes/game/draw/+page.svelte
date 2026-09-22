@@ -1,4 +1,11 @@
 <script lang="ts">
+	// ── Draw Together room create/join screen — commented out while
+	// realtime-server (Railway) is offline. To restore: uncomment this whole
+	// block and swap the placeholder markup below back to the original form
+	// (also commented out, right after this script tag). See memory:
+	// peechy-multiplayer-temporarily-disabled for the full picture.
+
+	/*
 	import { goto } from '$app/navigation';
 	import { authUserStore } from '$lib/data/stores/authUser';
 	import { connect, createRoom, joinRoom, drawingStore } from '$lib/data/stores/drawing';
@@ -54,7 +61,12 @@
 			if (ok) goto(`/game/draw/${code}`);
 		});
 	}
+	*/
 </script>
+
+<!-- Original create/join room UI — commented out below, replaced by the
+     "coming soon" placeholder further down while the realtime-server
+     backend is offline.
 
 <div
 	class="flex min-h-screen flex-col items-center gap-8 bg-linear-to-br from-primary-100/40 via-white to-primary-100/20 px-4 py-16"
@@ -149,3 +161,18 @@
 		pendingAction = null;
 	}}
 />
+-->
+
+<div
+	class="flex min-h-screen flex-col items-center justify-center gap-4 bg-linear-to-br from-primary-100/40 via-white to-primary-100/20 px-4 py-16 text-center"
+>
+	<span class="text-5xl">🚧</span>
+	<h1 class="text-2xl font-bold text-primary-600">🎨 วาดรูปด้วยกัน</h1>
+	<p class="max-w-[20rem] text-sm text-gray-500">ฟีเจอร์นี้อยู่ระหว่างการพัฒนา จะพร้อมใช้งานเร็วๆ นี้</p>
+	<a
+		href="/"
+		class="mt-2 rounded-full bg-primary-500 px-6 py-2 text-sm font-medium text-white transition-colors hover:bg-primary-400"
+	>
+		กลับหน้าหลัก
+	</a>
+</div>
