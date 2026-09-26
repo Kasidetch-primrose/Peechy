@@ -817,7 +817,7 @@
 					<button
 						type="button"
 						class="absolute right-2 bottom-2 cursor-pointer rounded-full border-2 border-white bg-primary-500 px-2.5 py-1 text-xs font-medium text-white shadow-md"
-						title="ล็อกรูป (Trace) แล้ววาดทับได้เลย"
+						title="ล็อกรูป (ลอกลาย) แล้ววาดทับได้เลย"
 						onpointerdown={(e) => e.stopPropagation()}
 						onclick={() => onLock(layer.id)}
 					>

@@ -44,8 +44,10 @@
 	}
 
 	function handleJoin() {
-		const code = joinCode.trim();
-		if (code.length !== 5) return;
+		// Accept "D12345", "d12345" or just the digits.
+		const typed = joinCode.trim().toUpperCase();
+		const code = /^\d{5}$/.test(typed) ? `D${typed}` : typed;
+		if (!/^D\d{5}$/.test(code)) return;
 		return withIdentity(async (identity) => {
 			joining = true;
 			connect(identity.id, identity.name);
@@ -123,16 +125,16 @@
 			<input
 				type="text"
 				bind:value={joinCode}
-				maxlength="5"
-				inputmode="numeric"
-				placeholder="กรอกรหัสห้อง 5 หลัก"
+				maxlength="6"
+				
+				placeholder="กรอกรหัสห้อง เช่น D12345"
 				class="w-full bg-transparent px-4 py-3 text-sm text-gray-700 outline-none placeholder:text-gray-400"
 				onkeydown={(e) => e.key === 'Enter' && handleJoin()}
 			/>
 			<button
 				type="button"
 				onclick={handleJoin}
-				disabled={joining || joinCode.trim().length !== 5}
+				disabled={joining || !/^D?\d{5}$/i.test(joinCode.trim())}
 				class="bg-primary-500 px-4 py-3 text-sm font-medium whitespace-nowrap text-white transition-colors hover:bg-primary-400 disabled:cursor-not-allowed disabled:bg-btn-primary-disabled"
 			>
 				{joining ? '...' : 'เข้าร่วม'}

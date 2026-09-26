@@ -15,7 +15,7 @@
 	import { getGuestId, saveGuestName } from '$lib/utils/guest-identity';
 	import type { DrawTool, IDrawReference } from '$lib/data/interface/drawing';
 
-	const code = $derived(page.params.code ?? '');
+	const code = $derived((page.params.code ?? '').toUpperCase());
 	const selfId = $derived($drawingStore.selfId);
 	let showGuestModal = $state(false);
 	let canUndo = $state(false);
@@ -27,6 +27,7 @@
 	// sees and can adjust it) or private again, one at a time or via "select all".
 	// The drawing is always above all the layers.
 	let showRefPanel = $state(false);
+	let showHelp = $state(false);
 	let refPanelWrap = $state<HTMLElement | null>(null);
 	let selectedRefId = $state<string | null>(null); // the layer being adjusted (opacity, rotation, position…)
 	let checkedIds = $state<string[]>([]); // tick boxes for the bulk public/private buttons
@@ -65,7 +66,8 @@
 		if (hiddenIds.some((id) => !ids.has(id))) hiddenIds = hiddenIds.filter((id) => ids.has(id));
 	});
 	const layerList = $derived([...layers].reverse()); // panel order: top first
-	const canSetVisibility = (layer: IDrawReference) => layer.ownerId === '' || layer.ownerId === selfId;
+	const canSetVisibility = (layer: IDrawReference) =>
+		layer.ownerId === '' || layer.ownerId === selfId;
 	const myLayers = $derived(layers.filter(canSetVisibility));
 	const checkedMine = $derived(myLayers.filter((l) => checkedIds.includes(l.id)));
 	const allMineChecked = $derived(myLayers.length > 0 && checkedMine.length === myLayers.length);
@@ -158,7 +160,8 @@
 	function flushOpacity() {
 		clearTimeout(opacityTimer);
 		opacityTimer = undefined;
-		if (pendingOpacity) DrawingService.refPatch(code, pendingOpacity.id, { opacity: pendingOpacity.value });
+		if (pendingOpacity)
+			DrawingService.refPatch(code, pendingOpacity.id, { opacity: pendingOpacity.value });
 		pendingOpacity = null;
 	}
 
@@ -191,7 +194,8 @@
 	function flushRotation() {
 		clearTimeout(rotationTimer);
 		rotationTimer = undefined;
-		if (pendingRotation) DrawingService.refPatch(code, pendingRotation.id, { rotation: pendingRotation.value });
+		if (pendingRotation)
+			DrawingService.refPatch(code, pendingRotation.id, { rotation: pendingRotation.value });
 		pendingRotation = null;
 	}
 
@@ -230,7 +234,7 @@
 	const refNoticeText = $derived.by(() => {
 		if (!refNotice) return '';
 		if (refNotice.reason === 'busy') return `${refNotice.byName ?? 'เพื่อน'} กำลังจัดรูปอยู่`;
-		if (refNotice.reason === 'locked') return '🔒 เลเยอร์นี้ถูกล็อกอยู่ ปลดล็อกก่อนถึงจะแก้ได้';
+		if (refNotice.reason === 'locked') return '🔒 รูปนี้ถูกล็อกอยู่ ปลดล็อกก่อนถึงจะแก้ได้';
 		if (refNotice.reason === 'limit') return 'อัปโหลดรูปต้นแบบได้สูงสุดคนละ 8 รูป';
 		return 'รูปนี้ใช้ไม่ได้';
 	});
@@ -254,7 +258,8 @@
 		// CSS alone doesn't stop iOS's selection loupe on rapid taps; vetoing the
 		// selection at its source does. Form fields (the nickname box) still work.
 		const blockSelection = (e: Event) => {
-			const el = e.target instanceof Node ? (e.target.parentElement ?? (e.target as Element)) : null;
+			const el =
+				e.target instanceof Node ? (e.target.parentElement ?? (e.target as Element)) : null;
 			if (el instanceof Element && el.closest('input, textarea')) return;
 			e.preventDefault();
 		};
@@ -271,7 +276,9 @@
 	$effect(() => {
 		const header = document.querySelector('header');
 		if (!header) return;
-		const observer = new ResizeObserver(() => (navHeight = Math.round(header.getBoundingClientRect().height)));
+		const observer = new ResizeObserver(
+			() => (navHeight = Math.round(header.getBoundingClientRect().height))
+		);
 		observer.observe(header);
 		return () => observer.disconnect();
 	});
@@ -281,13 +288,24 @@
 		const ticker = setInterval(() => (now = Date.now()), 500);
 		return () => clearInterval(ticker);
 	});
-	const cooldownSeconds = $derived(Math.max(0, Math.ceil(($drawingStore.clearCooldownUntil - now) / 1000)));
+	const cooldownSeconds = $derived(
+		Math.max(0, Math.ceil(($drawingStore.clearCooldownUntil - now) / 1000))
+	);
 
 	const reduceMotion =
 		typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 	const motion = (ms: number) => (reduceMotion ? 0 : ms);
 
-	const PEN_COLORS = ['#1f2937', '#ff9b73', '#ffaab0', '#ffe4a0', '#a8edcc', '#a8d8ff', '#d4b8ff', '#ffffff'];
+	const PEN_COLORS = [
+		'#1f2937',
+		'#ff9b73',
+		'#ffaab0',
+		'#ffe4a0',
+		'#a8edcc',
+		'#a8d8ff',
+		'#d4b8ff',
+		'#ffffff'
+	];
 	let tool = $state<DrawTool>('pen');
 	let color = $state(PEN_COLORS[0]);
 	let strokeWidth = $state(6);
@@ -334,6 +352,10 @@
 	}
 
 	function handleKeydown(e: KeyboardEvent) {
+		if (e.key === 'Escape' && showHelp) {
+			showHelp = false;
+			return;
+		}
 		if (e.key === 'Escape' && showRefPanel && !deleteTarget) showRefPanel = false;
 		if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.key.toLowerCase() !== 'z') return;
 		const target = e.target as HTMLElement | null;
@@ -363,7 +385,11 @@
 	onDestroy(() => clearTimeout(toastTimer));
 
 	async function copyCode() {
-		showToast((await copyText(code)) ? `📋 คัดลอกรหัสห้องแล้ว (${code})` : `คัดลอกไม่สำเร็จ — รหัสห้องคือ ${code}`);
+		showToast(
+			(await copyText(code))
+				? `📋 คัดลอกรหัสห้องแล้ว (${code})`
+				: `คัดลอกไม่สำเร็จ — รหัสห้องคือ ${code}`
+		);
 	}
 
 	let canvasRef = $state<DrawCanvas>();
@@ -438,6 +464,189 @@
 	</div>
 {/if}
 
+{#if showHelp}
+	<div
+		transition:fade={{ duration: motion(180) }}
+		class="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
+		role="dialog"
+		aria-modal="true"
+		aria-label="วิธีเล่น"
+		tabindex="-1"
+		onpointerdown={(e) => {
+			if (e.target === e.currentTarget) showHelp = false;
+		}}
+	>
+		<div
+			transition:scale={{ start: 0.94, duration: motion(200) }}
+			class="flex max-h-[85vh] w-full max-w-[34rem] flex-col rounded-2xl bg-white shadow-xl"
+		>
+			<div class="flex items-center justify-between gap-3 border-b border-gray-100 px-6 py-4">
+				<h3 class="text-base font-semibold text-gray-900">วิธีเล่น &amp; คำอธิบายปุ่ม</h3>
+				<button
+					type="button"
+					onclick={() => (showHelp = false)}
+					aria-label="ปิด"
+					class="flex h-8 w-8 cursor-pointer items-center justify-center rounded-full text-gray-500 transition-all hover:bg-gray-100 active:scale-90"
+				>
+					✕
+				</button>
+			</div>
+			<div class="space-y-5 overflow-y-auto px-6 py-4">
+				<section>
+					<h4 class="text-sm font-semibold text-gray-900">🎨 วาดด้วยกัน</h4>
+					<ul class="mt-1.5 space-y-1.5 text-[13px] leading-relaxed text-gray-600">
+						<li class="flex gap-2">
+							<span class="text-primary-400">•</span><span
+								>ทุกคนในห้องวาดบนกระดาษผืนเดียวกันแบบเรียลไทม์ เห็นเส้นของกันและกันทันที</span
+							>
+						</li>
+						<li class="flex gap-2">
+							<span class="text-primary-400">•</span><span
+								>ชวนเพื่อนด้วยการกดปุ่มคัดลอกข้างรหัสห้อง แล้วให้เพื่อนใส่รหัสในช่อง “รหัสห้อง”
+								หรือเปิดลิงก์เดียวกัน (ไม่ต้องล็อกอินก็เล่นได้)</span
+							>
+						</li>
+						<li class="flex gap-2">
+							<span class="text-primary-400">•</span><span
+								>บนมือถือ: ใช้นิ้วเดียววาด ใช้สองนิ้วซูม/เลื่อนกระดาษ (สองนิ้วจะไม่ลากเส้น)</span
+							>
+						</li>
+					</ul>
+				</section>
+				<section>
+					<h4 class="text-sm font-semibold text-gray-900">🖌 เครื่องมือด้านล่าง</h4>
+					<ul class="mt-1.5 space-y-1.5 text-[13px] leading-relaxed text-gray-600">
+						<li class="flex gap-2">
+							<span class="text-primary-400">•</span><span>ปากกา — วาดเส้นตามสีและขนาดที่เลือก</span
+							>
+						</li>
+						<li class="flex gap-2">
+							<span class="text-primary-400">•</span><span
+								>ยางลบ — ลบเส้นที่วาด (ไม่ลบรูปที่อัปโหลด)</span
+							>
+						</li>
+						<li class="flex gap-2">
+							<span class="text-primary-400">•</span><span>ถังสี — แตะพื้นที่ปิดเพื่อเทสีลงไป</span>
+						</li>
+						<li class="flex gap-2">
+							<span class="text-primary-400">•</span><span
+								>จานสี — เลือกสี, แถบเลื่อน “ขนาดปากกา” — ปรับความหนาของปากกา/ยางลบ
+								(วงกลมบนกระดาษคือขนาดจริง)</span
+							>
+						</li>
+					</ul>
+				</section>
+				<section>
+					<h4 class="text-sm font-semibold text-gray-900">⚙️ ปุ่มด้านบน</h4>
+					<ul class="mt-1.5 space-y-1.5 text-[13px] leading-relaxed text-gray-600">
+						<li class="flex gap-2">
+							<span class="text-primary-400">•</span><span
+								>ย้อนกลับ (Ctrl+Z) — ย้อนเส้นล่าสุดของ “คุณ” เท่านั้น ไม่กระทบเส้นของคนอื่น</span
+							>
+						</li>
+						<li class="flex gap-2">
+							<span class="text-primary-400">•</span><span
+								>ล้างกระดาษ — ต้องให้ทุกคนในห้องโหวต “ตกลง” ภายใน 30 วินาที และมีคูลดาวน์ 10 วินาที
+								เพื่อกันการกดพร้อมกัน</span
+							>
+						</li>
+						<li class="flex gap-2">
+							<span class="text-primary-400">•</span><span
+								>บันทึกรูป — ดาวน์โหลดภาพที่วาดเป็น PNG (ไม่รวมรูปที่อัปโหลดไว้ ลอกลาย)</span
+							>
+						</li>
+						<li class="flex gap-2">
+							<span class="text-primary-400">•</span><span
+								>ออกจากห้อง — ออกจากห้องนี้แล้วกลับหน้าแรก</span
+							>
+						</li>
+					</ul>
+				</section>
+				<section>
+					<h4 class="text-sm font-semibold text-gray-900">อัปโหลดรูป (สำหรับ ลอกลาย)</h4>
+					<ul class="mt-1.5 space-y-1.5 text-[13px] leading-relaxed text-gray-600">
+						<li class="flex gap-2">
+							<span class="text-primary-400">•</span><span
+								>กดปุ่ม “อัปโหลดรูป” ด้านล่าง → “＋ เพิ่มรูป” เลือกได้หลายไฟล์ (PNG/JPEG/WebP
+								ไม่เกิน 5 MB) รูปจะอยู่ใต้เส้นที่วาดเสมอ</span
+							>
+						</li>
+						<li class="flex gap-2">
+							<span class="text-primary-400">•</span><span
+								>รูปที่ยังไม่ล็อก: คลิกเพื่อเลือก ลากตัวรูปเพื่อย้าย ลากมุมเพื่อย่อ/ขยาย ลากปุ่ม ↻
+								เพื่อหมุน (รูปที่ยังไม่ล็อกจะบังการวาด)</span
+							>
+						</li>
+						<li class="flex gap-2">
+							<span class="text-primary-400">•</span><span
+								>หลังเลือกรูป การคลิกบนกระดาษครั้งแรกจะแค่ยกเลิกการเลือก ครั้งถัดไปถึงจะวาด</span
+							>
+						</li>
+						<li class="flex gap-2">
+							<span class="text-primary-400">•</span><span
+								>ปรับความทึบและมุมหมุนได้ในแผง หรือกดปุ่ม ↺ −90° / ↻ +90° / รีเซ็ต</span
+							>
+						</li>
+						<li class="flex gap-2">
+							<span class="text-primary-400">•</span><span
+								>▲ ▼ — เลื่อนลำดับซ้อนของรูป (บนสุดอยู่หน้าสุด แต่เส้นวาดอยู่เหนือทุกรูปเสมอ)</span
+							>
+						</li>
+					</ul>
+				</section>
+				<section>
+					<h4 class="text-sm font-semibold text-gray-900">🔒 สถานะของรูป</h4>
+					<ul class="mt-1.5 space-y-1.5 text-[13px] leading-relaxed text-gray-600">
+						<li class="flex gap-2">
+							<span class="text-primary-400">•</span><span
+								>🔒 ล็อก (ลอกลาย) — รูปนิ่ง ย้าย/ย่อขยาย/หมุน/ลบไม่ได้ แต่วาดทับได้เต็มที่ กด
+								“ปลดล็อก” เพื่อแก้ไขอีกครั้ง (ใช้ปุ่ม “🔒 ล็อก” ที่ลอยบนรูปได้เลย)</span
+							>
+						</li>
+						<li class="flex gap-2">
+							<span class="text-primary-400">•</span><span
+								>🌐 สาธารณะ — ทุกคนในห้องเห็นและช่วยกันจัดรูปได้ (รูปที่อัปโหลดใหม่เป็นแบบนี้)</span
+							>
+						</li>
+						<li class="flex gap-2">
+							<span class="text-primary-400">•</span><span
+								>😎 ส่วนตัว — เห็นแค่เจ้าของรูป ใช้ ลอกลาย คนเดียวโดยไม่ให้คนอื่นเห็น
+								เฉพาะเจ้าของเท่านั้นที่เปลี่ยนสถานะได้</span
+							>
+						</li>
+						<li class="flex gap-2">
+							<span class="text-primary-400">•</span><span
+								>“เลือกทั้งหมด” + ปุ่มเปิดสาธารณะ/ตั้งเป็นส่วนตัว — เปลี่ยนสถานะหลายรูปพร้อมกัน</span
+							>
+						</li>
+						<li class="flex gap-2">
+							<span class="text-primary-400">•</span><span
+								>👁 ปุ่มตา — ซ่อน/แสดงรูปบนหน้าจอของคุณเท่านั้น (คนอื่นไม่ได้รับผล) ปุ่ม
+								“ซ่อนทั้งหมด/แสดงทั้งหมด” ที่หัวแผงทำงานเป็นปุ่มเดียว:
+								ถ้ามีรูปที่แสดงอยู่จะซ่อนทั้งหมดก่อน กดอีกครั้งจึงแสดงทั้งหมด</span
+							>
+						</li>
+						<li class="flex gap-2">
+							<span class="text-primary-400">•</span><span
+								>ถ้ามีคนอื่นกำลังลากรูปอยู่ จะขึ้นป้าย “กำลังจัดรูป” รอให้เขาปล่อยก่อนถึงจะจับได้</span
+							>
+						</li>
+					</ul>
+				</section>
+			</div>
+			<div class="border-t border-gray-100 px-6 py-3">
+				<button
+					type="button"
+					onclick={() => (showHelp = false)}
+					class="w-full cursor-pointer rounded-xl bg-primary-500 py-2 text-sm font-semibold text-white transition-all hover:bg-primary-400 hover:shadow-md active:scale-95"
+				>
+					เข้าใจแล้ว
+				</button>
+			</div>
+		</div>
+	</div>
+{/if}
+
 {#if deleteTarget}
 	<div
 		transition:fade={{ duration: motion(180) }}
@@ -449,7 +658,7 @@
 			transition:scale={{ start: 0.94, duration: motion(200) }}
 			class="mx-4 w-full max-w-[26rem] rounded-2xl bg-white p-6 shadow-xl"
 		>
-			<h3 class="text-base font-semibold text-gray-900">ลบเลเยอร์ "{deleteTarget.name}"?</h3>
+			<h3 class="text-base font-semibold text-gray-900">ลบรูป "{deleteTarget.name}"?</h3>
 			<p class="mt-1 text-sm text-gray-500">
 				{#if deleteTarget.isPublic}
 					รูปนี้จะหายไปจากหน้าจอของทุกคนในห้อง (เส้นที่วาดไว้แล้วไม่ถูกลบ)
@@ -470,7 +679,7 @@
 					onclick={confirmDeleteLayer}
 					class="flex-1 cursor-pointer rounded-xl bg-red-500 py-2 text-sm font-semibold text-white transition-all hover:bg-red-400 hover:shadow-md active:scale-95"
 				>
-					ลบเลเยอร์
+					ลบรูป
 				</button>
 			</div>
 		</div>
@@ -490,7 +699,8 @@
 		>
 			<h3 class="text-base font-semibold text-gray-900">ขอล้างกระดาษ?</h3>
 			<p class="mt-1 text-sm text-gray-500">
-				ระบบจะให้ทุกคนในห้องโหวต ต้องเห็นด้วยครบทุกคนจึงจะล้าง ถ้ามีคนไม่เห็นด้วยหรือหมดเวลา 30 วินาที กระดาษจะไม่ถูกล้าง
+				ระบบจะให้ทุกคนในห้องโหวต ต้องเห็นด้วยครบทุกคนจึงจะล้าง ถ้ามีคนไม่เห็นด้วยหรือหมดเวลา 30
+				วินาที กระดาษจะไม่ถูกล้าง
 			</p>
 			<div class="mt-5 flex gap-3">
 				<button
@@ -519,13 +729,15 @@
 {:else if $drawingStore.error && !$drawingStore.room}
 	<div class="flex min-h-screen flex-col items-center justify-center gap-4">
 		<p class="rounded-xl bg-red-50 px-4 py-2 text-sm text-red-600">{$drawingStore.error}</p>
-		<a href="/game/draw" class="text-sm font-medium text-primary-500 hover:underline">กลับไปหน้าห้องวาดรูป</a>
+		<a href="/game/draw" class="text-sm font-medium text-primary-500 hover:underline"
+			>กลับไปหน้าห้องวาดรูป</a
+		>
 	</div>
 {:else}
 	<!-- One screen tall (viewport minus the measured navbar height) so the tool bar never
 	     scrolls out of view. The min-h is only a fallback for very short windows. -->
 	<div
-		class="flex min-h-[26rem] flex-col gap-2 bg-linear-to-br from-primary-100/40 via-white to-primary-100/20 p-2 select-none sm:p-3 [-webkit-tap-highlight-color:transparent] [-webkit-touch-callout:none] [&_button:not(:disabled)]:cursor-pointer"
+		class="flex min-h-[26rem] flex-col gap-2 bg-linear-to-br from-primary-100/40 via-white to-primary-100/20 p-2 select-none [-webkit-tap-highlight-color:transparent] [-webkit-touch-callout:none] sm:p-3 [&_button:not(:disabled)]:cursor-pointer"
 		style="height: calc(100dvh - {navHeight}px);"
 	>
 		<div class="flex flex-wrap items-center justify-between gap-3">
@@ -554,9 +766,20 @@
 					</svg>
 				</button>
 				{#if $drawingStore.room}
-					<span class="rounded-full bg-white/80 px-2.5 py-1 text-[11px] font-medium text-gray-500 shadow-sm">
+					<span
+						class="rounded-full bg-white/80 px-2.5 py-1 text-[11px] font-medium text-gray-500 shadow-sm"
+					>
 						{$drawingStore.room.ratio}
 					</span>
+					<button
+						type="button"
+						onclick={() => (showHelp = true)}
+						title="วิธีเล่นและคำอธิบายปุ่มต่างๆ"
+						aria-label="วิธีเล่นและคำอธิบายปุ่มต่างๆ"
+						class="flex h-6 w-6 cursor-pointer items-center justify-center rounded-full bg-white/80 text-xs font-bold text-primary-600 shadow-sm transition-all hover:bg-white hover:shadow active:scale-90"
+					>
+						?
+					</button>
 				{/if}
 			</div>
 
@@ -613,7 +836,9 @@
 			</div>
 		</div>
 
-		<div class="relative min-h-[8rem] min-w-0 flex-1 overflow-hidden rounded-2xl border border-primary-100 bg-primary-100/30 shadow-sm">
+		<div
+			class="relative min-h-[8rem] min-w-0 flex-1 overflow-hidden rounded-2xl border border-primary-100 bg-primary-100/30 shadow-sm"
+		>
 			{#if $drawingStore.room}
 				<DrawCanvas
 					bind:this={canvasRef}
@@ -640,16 +865,23 @@
 			{/if}
 		</div>
 
-		<div class="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 rounded-2xl border border-primary-100 bg-white/80 px-3 py-2 shadow-sm">
-			<div class="flex items-center gap-1 rounded-full bg-gray-100 p-1" role="radiogroup" aria-label="เครื่องมือ">
+		<div
+			class="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 rounded-2xl border border-primary-100 bg-white/80 px-3 py-2 shadow-sm"
+		>
+			<div
+				class="flex items-center gap-1 rounded-full bg-gray-100 p-1"
+				role="radiogroup"
+				aria-label="เครื่องมือ"
+			>
 				<button
 					type="button"
 					role="radio"
 					aria-checked={tool === 'pen'}
 					onclick={() => (tool = 'pen')}
-					class="rounded-full px-3 py-1 text-xs font-medium transition-all active:scale-95 {tool === 'pen'
-							? 'bg-primary-500 text-white shadow-sm hover:bg-primary-400'
-							: 'text-gray-600 hover:bg-white hover:shadow-sm'}"
+					class="rounded-full px-3 py-1 text-xs font-medium transition-all active:scale-95 {tool ===
+					'pen'
+						? 'bg-primary-500 text-white shadow-sm hover:bg-primary-400'
+						: 'text-gray-600 hover:bg-white hover:shadow-sm'}"
 				>
 					✏️ ปากกา
 				</button>
@@ -658,9 +890,10 @@
 					role="radio"
 					aria-checked={tool === 'eraser'}
 					onclick={() => (tool = 'eraser')}
-					class="rounded-full px-3 py-1 text-xs font-medium transition-all active:scale-95 {tool === 'eraser'
-							? 'bg-primary-500 text-white shadow-sm hover:bg-primary-400'
-							: 'text-gray-600 hover:bg-white hover:shadow-sm'}"
+					class="rounded-full px-3 py-1 text-xs font-medium transition-all active:scale-95 {tool ===
+					'eraser'
+						? 'bg-primary-500 text-white shadow-sm hover:bg-primary-400'
+						: 'text-gray-600 hover:bg-white hover:shadow-sm'}"
 				>
 					🧽 ยางลบ
 				</button>
@@ -669,9 +902,10 @@
 					role="radio"
 					aria-checked={tool === 'bucket'}
 					onclick={() => (tool = 'bucket')}
-					class="rounded-full px-3 py-1 text-xs font-medium transition-all active:scale-95 {tool === 'bucket'
-							? 'bg-primary-500 text-white shadow-sm hover:bg-primary-400'
-							: 'text-gray-600 hover:bg-white hover:shadow-sm'}"
+					class="rounded-full px-3 py-1 text-xs font-medium transition-all active:scale-95 {tool ===
+					'bucket'
+						? 'bg-primary-500 text-white shadow-sm hover:bg-primary-400'
+						: 'text-gray-600 hover:bg-white hover:shadow-sm'}"
 				>
 					🪣 ถังสี
 				</button>
@@ -686,7 +920,8 @@
 							color = c;
 							if (tool === 'eraser') tool = 'pen';
 						}}
-						class="h-7 w-7 rounded-full border-2 transition-transform hover:scale-110 active:scale-95 {color === c && tool !== 'eraser'
+						class="h-7 w-7 rounded-full border-2 transition-transform hover:scale-110 active:scale-95 {color ===
+							c && tool !== 'eraser'
 							? 'scale-110 border-primary-500'
 							: 'border-gray-200 hover:border-primary-300'}"
 						style="background-color: {c};"
@@ -729,11 +964,16 @@
 						: 'border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-100'}"
 				>
 					{#if uploading}
-						<span class="h-3 w-3 animate-spin rounded-full border-2 border-primary-200 border-t-primary-500" aria-label="กำลังอัปโหลดรูป"></span>
+						<span
+							class="h-3 w-3 animate-spin rounded-full border-2 border-primary-200 border-t-primary-500"
+							aria-label="กำลังอัปโหลดรูป"
+						></span>
 					{/if}
-					🖼 เลเยอร์
+					อัปโหลดรูป
 					{#if layers.length > 0}
-						<span class="rounded-full bg-primary-500 px-1.5 text-[10px] leading-4 text-white">{layers.length}</span>
+						<span class="rounded-full bg-primary-500 px-1.5 text-[10px] leading-4 text-white"
+							>{layers.length}</span
+						>
 					{/if}
 				</button>
 
@@ -752,9 +992,11 @@
 						/>
 
 						<div class="flex items-center justify-between gap-2">
-							<p class="text-sm font-semibold text-gray-900">เลเยอร์</p>
+							<!-- <p class="text-sm font-semibold text-gray-900">📷 อัปโหลดรูป</p> -->
 							<div class="flex items-center gap-2">
-								<p class="text-[11px] text-gray-400">ของฉัน {myLayers.length} · ทั้งหมดที่เห็น {layers.length}</p>
+								<p class="text-[11px] text-gray-400">
+									รูปของฉัน {myLayers.length} · รูปทั้งหมดที่เห็น {layers.length}
+								</p>
 								{#if layers.length > 0}
 									<button
 										type="button"
@@ -763,7 +1005,7 @@
 										aria-label={anyVisible ? 'ซ่อนรูปทั้งหมด' : 'แสดงรูปทั้งหมด'}
 										class="flex h-7 shrink-0 cursor-pointer items-center gap-1 rounded-md border border-gray-200 px-2 text-[11px] font-medium text-gray-600 transition-all hover:bg-gray-100 active:scale-95"
 									>
-										{anyVisible ? '🙈 ซ่อนทั้งหมด' : '👁 แสดงทั้งหมด'}
+										{anyVisible ? '😎 ซ่อนทั้งหมด' : '👁 แสดงทั้งหมด'}
 									</button>
 								{/if}
 							</div>
@@ -772,7 +1014,7 @@
 						<!-- Add images: they start private (only the uploader sees them) -->
 						<div class="mt-3 rounded-xl border border-primary-100 bg-primary-50/50 p-2">
 							<p class="text-[11px] leading-snug text-gray-500">
-								🌐 รูปที่เพิ่มจะ<b>ทุกคนเห็น</b>ทันที กดตั้งเป็นส่วนตัวได้ถ้าอยากใช้ trace คนเดียว
+								🌐 รูปที่เพิ่มจะ<b>ทุกคนเห็น</b>ทันที กดตั้งเป็นส่วนตัวได้ถ้าอยากใช้ ลอกลาย คนเดียว
 							</p>
 							<button
 								type="button"
@@ -787,7 +1029,9 @@
 						<!-- Select all / bulk public-private, for the images this player owns -->
 						{#if myLayers.length > 0}
 							<div class="mt-3 rounded-xl border border-gray-100 bg-gray-50 p-2">
-								<label class="flex cursor-pointer items-center gap-2 text-xs font-medium text-gray-700">
+								<label
+									class="flex cursor-pointer items-center gap-2 text-xs font-medium text-gray-700"
+								>
 									<input
 										type="checkbox"
 										checked={allMineChecked}
@@ -795,12 +1039,18 @@
 										class="h-4 w-4 cursor-pointer accent-primary-500"
 									/>
 									เลือกทั้งหมด
-									<span class="font-normal text-gray-400">({checkedMine.length}/{myLayers.length})</span>
+									<span class="font-normal text-gray-400"
+										>({checkedMine.length}/{myLayers.length})</span
+									>
 								</label>
 								<div class="mt-2 grid grid-cols-2 gap-2">
 									<button
 										type="button"
-										onclick={() => setVisibility(checkedMine.map((l) => l.id), true)}
+										onclick={() =>
+											setVisibility(
+												checkedMine.map((l) => l.id),
+												true
+											)}
 										disabled={checkedMine.length === 0}
 										class="rounded-lg border border-primary-300 bg-white px-2 py-1.5 text-xs font-medium text-primary-600 transition-all hover:bg-primary-50 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white"
 									>
@@ -808,32 +1058,53 @@
 									</button>
 									<button
 										type="button"
-										onclick={() => setVisibility(checkedMine.map((l) => l.id), false)}
+										onclick={() =>
+											setVisibility(
+												checkedMine.map((l) => l.id),
+												false
+											)}
 										disabled={checkedMine.length === 0}
 										class="rounded-lg border border-gray-300 bg-white px-2 py-1.5 text-xs font-medium text-gray-700 transition-all hover:bg-gray-100 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white"
 									>
-										🙈 ตั้งเป็นส่วนตัว
+										😎 ตั้งเป็นส่วนตัว
 									</button>
 								</div>
 							</div>
 						{/if}
 
 						<!-- Layer stack, top first (like Photoshop) -->
-						<ul class="mt-3 flex flex-col gap-1" aria-label="รายการเลเยอร์">
-							<li class="flex items-center gap-2 rounded-lg bg-gray-50 px-2 py-1.5 text-xs text-gray-500">
+						<ul class="mt-3 flex flex-col gap-1" aria-label="รายการรูป">
+							<li
+								class="flex items-center gap-2 rounded-lg bg-gray-50 px-2 py-1.5 text-xs text-gray-500"
+							>
 								<span class="w-6 text-center">✏️</span>
-								<span class="flex-1">เส้นวาด <span class="text-gray-400">· อยู่บนสุดเสมอ</span></span>
+								<span class="flex-1"
+									>เส้นวาด <span class="text-gray-400">· อยู่บนสุดเสมอ</span></span
+								>
 							</li>
 							{#each pendingUploads as pend (pend.key)}
-								<li class="flex items-center gap-2 rounded-lg border border-dashed border-primary-200 bg-primary-50/40 px-2 py-1" aria-busy="true">
-									<span class="relative h-8 w-8 shrink-0 overflow-hidden rounded border border-gray-200 bg-white">
-										<img src={pend.preview} alt="" draggable="false" class="h-full w-full object-cover opacity-50" />
+								<li
+									class="flex items-center gap-2 rounded-lg border border-dashed border-primary-200 bg-primary-50/40 px-2 py-1"
+									aria-busy="true"
+								>
+									<span
+										class="relative h-8 w-8 shrink-0 overflow-hidden rounded border border-gray-200 bg-white"
+									>
+										<img
+											src={pend.preview}
+											alt=""
+											draggable="false"
+											class="h-full w-full object-cover opacity-50"
+										/>
 										<span class="absolute inset-0 flex items-center justify-center bg-white/40">
-											<span class="h-4 w-4 animate-spin rounded-full border-2 border-primary-200 border-t-primary-500"></span>
+											<span
+												class="h-4 w-4 animate-spin rounded-full border-2 border-primary-200 border-t-primary-500"
+											></span>
 										</span>
 									</span>
 									<span class="min-w-0 flex-1">
-										<span class="block truncate text-xs font-medium text-gray-700">{pend.name}</span>
+										<span class="block truncate text-xs font-medium text-gray-700">{pend.name}</span
+										>
 										<span class="block text-[10px] text-primary-500">กำลังอัปโหลด...</span>
 									</span>
 								</li>
@@ -842,7 +1113,8 @@
 								{@const mine = canSetVisibility(layer)}
 								{@const hidden = hiddenIds.includes(layer.id)}
 								<li
-									class="flex items-center gap-1 rounded-lg border px-1 py-1 transition-colors {selectedRefId === layer.id
+									class="flex items-center gap-1 rounded-lg border px-1 py-1 transition-colors {selectedRefId ===
+									layer.id
 										? 'border-primary-300 bg-primary-100/50'
 										: 'border-transparent hover:bg-gray-50'}"
 								>
@@ -856,7 +1128,16 @@
 											? 'text-gray-300'
 											: 'text-gray-700'}"
 									>
-										<svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+										<svg
+											viewBox="0 0 24 24"
+											class="h-4 w-4"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2"
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											aria-hidden="true"
+										>
 											<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" />
 											<circle cx="12" cy="12" r="3" />
 											{#if hidden}<path d="M4 4l16 16" />{/if}
@@ -867,7 +1148,7 @@
 											type="checkbox"
 											checked={checkedIds.includes(layer.id)}
 											onchange={() => toggleChecked(layer.id)}
-											aria-label="เลือกเลเยอร์ {layer.name}"
+											aria-label="เลือกรูป {layer.name}"
 											class="ml-1 h-4 w-4 shrink-0 cursor-pointer accent-primary-500"
 										/>
 									{:else}
@@ -882,12 +1163,17 @@
 											src={layer.url}
 											alt=""
 											draggable="false"
-											class="h-8 w-8 shrink-0 rounded border border-gray-200 bg-white object-cover {hidden ? 'opacity-40' : ''}"
+											class="h-8 w-8 shrink-0 rounded border border-gray-200 bg-white object-cover {hidden
+												? 'opacity-40'
+												: ''}"
 										/>
 										<span class="min-w-0 flex-1">
-											<span class="block truncate text-xs font-medium text-gray-800">{layer.name}</span>
+											<span class="block truncate text-xs font-medium text-gray-800"
+												>{layer.name}</span
+											>
 											<span class="block truncate text-[10px] text-gray-400">
-												{layer.isPublic ? '🌐 สาธารณะ' : '🙈 เห็นคนเดียว'} · {layer.ownerId === selfId
+												{layer.isPublic ? '🌐 สาธารณะ' : '😎 เห็นคนเดียว'} · {layer.ownerId ===
+												selfId
 													? 'ของคุณ'
 													: layer.ownerName
 														? `โดย ${layer.ownerName}`
@@ -908,7 +1194,7 @@
 											aria-label={layer.isPublic ? 'ตั้งเป็นส่วนตัว' : 'เปิดสาธารณะ'}
 											class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-sm transition-all hover:bg-gray-200 active:scale-90"
 										>
-											{layer.isPublic ? '🌐' : '🙈'}
+											{layer.isPublic ? '🌐' : '😎'}
 										</button>
 									{/if}
 									<span class="flex shrink-0 flex-col">
@@ -916,7 +1202,7 @@
 											type="button"
 											onclick={() => moveLayer(layer, 'up')}
 											disabled={!canMove(layer, 'up')}
-											aria-label="เลื่อนเลเยอร์ขึ้น"
+											aria-label="เลื่อนรูปขึ้น"
 											class="h-4 w-6 rounded text-[10px] leading-none text-gray-500 transition-all hover:bg-gray-200 active:scale-90 disabled:cursor-not-allowed disabled:opacity-25 disabled:hover:bg-transparent"
 										>
 											▲
@@ -925,7 +1211,7 @@
 											type="button"
 											onclick={() => moveLayer(layer, 'down')}
 											disabled={!canMove(layer, 'down')}
-											aria-label="เลื่อนเลเยอร์ลง"
+											aria-label="เลื่อนรูปลง"
 											class="h-4 w-6 rounded text-[10px] leading-none text-gray-500 transition-all hover:bg-gray-200 active:scale-90 disabled:cursor-not-allowed disabled:opacity-25 disabled:hover:bg-transparent"
 										>
 											▼
@@ -935,8 +1221,10 @@
 							{/each}
 						</ul>
 						{#if layers.length === 0}
-							<p class="mt-2 rounded-lg bg-gray-50 px-3 py-3 text-center text-[11px] leading-snug text-gray-400">
-								ยังไม่มีรูปต้นแบบ เพิ่มรูปแล้ววาดทับเพื่อ trace ได้
+							<p
+								class="mt-2 rounded-lg bg-gray-50 px-3 py-3 text-center text-[11px] leading-snug text-gray-400"
+							>
+								ยังไม่มีรูปต้นแบบ เพิ่มรูปแล้ววาดทับเพื่อ ลอกลาย ได้
 							</p>
 						{:else}
 							<p class="mt-1.5 text-[10px] text-gray-400">
@@ -950,7 +1238,11 @@
 								<p class="truncate text-xs font-semibold text-gray-800">{selected.name}</p>
 
 								{#if canSetVisibility(selected)}
-									<div class="mt-2 grid grid-cols-2 gap-1 rounded-lg bg-gray-100 p-1" role="radiogroup" aria-label="ใครเห็นรูปนี้">
+									<div
+										class="mt-2 grid grid-cols-2 gap-1 rounded-lg bg-gray-100 p-1"
+										role="radiogroup"
+										aria-label="ใครเห็นรูปนี้"
+									>
 										<button
 											type="button"
 											role="radio"
@@ -960,7 +1252,7 @@
 												? 'bg-white text-primary-600 shadow-sm'
 												: 'text-gray-500 hover:bg-white/60'}"
 										>
-											🙈 เห็นคนเดียว
+											😎 เห็นคนเดียว
 										</button>
 										<button
 											type="button"
@@ -983,7 +1275,9 @@
 								<label class="mt-2 block">
 									<span class="flex items-center justify-between text-xs text-gray-500">
 										ความทึบของรูป
-										<span class="font-medium text-gray-700">{Math.round(shownOpacity(selected) * 100)}%</span>
+										<span class="font-medium text-gray-700"
+											>{Math.round(shownOpacity(selected) * 100)}%</span
+										>
 									</span>
 									<input
 										type="range"
@@ -1000,7 +1294,9 @@
 								<label class="mt-2 block">
 									<span class="flex items-center justify-between text-xs text-gray-500">
 										หมุนรูป
-										<span class="font-medium text-gray-700">{Math.round(shownRotation(selected))}°</span>
+										<span class="font-medium text-gray-700"
+											>{Math.round(shownRotation(selected))}°</span
+										>
 									</span>
 									<input
 										type="range"
@@ -1048,7 +1344,7 @@
 										? 'border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100'
 										: 'border-gray-200 text-gray-700 hover:border-gray-300 hover:bg-gray-100'}"
 								>
-									{selected.locked ? '🔓 ปลดล็อก' : '🔒 ล็อก (Trace)'}
+									{selected.locked ? '🔓 ปลดล็อก' : '🔒 ล็อก (ลอกลาย)'}
 								</button>
 								<button
 									type="button"
@@ -1056,7 +1352,7 @@
 									disabled={selected.locked || selectedBusy}
 									class="mt-2 w-full rounded-xl border border-red-200 py-2 text-xs font-medium text-red-500 transition-all hover:border-red-300 hover:bg-red-50 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
 								>
-									🗑 ลบเลเยอร์นี้
+									🗑 ลบรูปนี้
 								</button>
 
 								<p class="mt-2 text-[11px] leading-snug text-gray-400">
@@ -1065,13 +1361,14 @@
 									{:else if selectedBusy}
 										{refControllers[selected.id]?.name ?? 'เพื่อน'} กำลังจัดรูปนี้อยู่ รอสักครู่
 									{:else}
-										ลากรูปบนกระดาษได้เลย ลากมุมเพื่อย่อขยาย ลากปุ่ม ↻ เพื่อหมุน แล้วกด "ล็อก" เพื่อเริ่ม trace (รูปที่ยังไม่ล็อกจะบังการวาด)
+										ลากรูปบนกระดาษได้เลย ลากมุมเพื่อย่อขยาย ลากปุ่ม ↻ เพื่อหมุน แล้วกด "ล็อก"
+										เพื่อเริ่ม ลอกลาย (รูปที่ยังไม่ล็อกจะบังการวาด)
 									{/if}
 								</p>
 							</div>
 						{:else if layers.length > 0}
 							<p class="mt-3 border-t border-gray-100 pt-3 text-center text-[11px] text-gray-400">
-								เลือกเลเยอร์เพื่อปรับความทึบ หมุน หรือล็อก
+								เลือกรูปเพื่อปรับความทึบ หมุน หรือล็อก
 							</p>
 						{/if}
 					</div>

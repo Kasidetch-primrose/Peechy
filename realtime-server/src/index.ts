@@ -111,8 +111,9 @@ io.on('connection', (socket) => {
 		}
 	});
 
-	socket.on('draw:room:join', async ({ code }, callback) => {
+	socket.on('draw:room:join', async (payload, callback) => {
 		try {
+			const code = String(payload?.code ?? '').trim().toUpperCase();
 			const result = await draw.joinRoom(code, playerId, playerName);
 			if (!result) return callback?.({ ok: false, message: 'ไม่พบห้องนี้' });
 

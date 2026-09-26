@@ -22,7 +22,8 @@ async function touch(code: string) {
 }
 
 export function generateRoomCode(): string {
-	return Math.floor(10000 + Math.random() * 90000).toString();
+	// "D" + 5 digits, so a code alone says which kind of room it is (guess-game codes are bare digits).
+	return `D${Math.floor(10000 + Math.random() * 90000)}`;
 }
 
 export async function roomExists(code: string): Promise<boolean> {

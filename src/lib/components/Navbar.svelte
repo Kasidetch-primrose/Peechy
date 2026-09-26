@@ -25,9 +25,20 @@
 		}
 	}
 
+	const isDrawCode = (c: string) => /^d\d{5}$/i.test(c);
+	const isValidCode = (c: string) => /^\d{5}$/.test(c) || isDrawCode(c);
+
 	async function handleJoinRoom() {
 		const code = joinCode.trim();
-		if (code.length !== 5) return;
+		if (!isValidCode(code)) return;
+		// One box, two kinds of rooms: "D12345" (any case) is a Draw Together room,
+		// plain digits are a guess-game room.
+		if (isDrawCode(code)) {
+			joinCode = '';
+			mobileMenuOpen = false;
+			goto(`/game/draw/${code.toUpperCase()}`);
+			return;
+		}
 		const user = $authUserStore.user;
 		if (user) {
 			await proceedJoin({ id: String(user.id), name: user.username });
@@ -98,16 +109,15 @@
 				<input
 					type="text"
 					bind:value={joinCode}
-					maxlength="5"
-					inputmode="numeric"
+					maxlength="6"
 					placeholder="รหัสห้อง"
-					class="w-24 bg-transparent px-3 py-1.5 text-sm text-gray-700 outline-none placeholder:text-gray-400"
+					class="w-36 bg-transparent px-3 py-1.5 text-sm text-gray-700 outline-none placeholder:text-gray-400"
 					onkeydown={(e) => e.key === 'Enter' && handleJoinRoom()}
 				/>
 				<button
 					type="button"
 					onclick={handleJoinRoom}
-					disabled={joining || joinCode.trim().length !== 5}
+					disabled={joining || !isValidCode(joinCode.trim())}
 					class="flex items-center justify-center bg-primary-500 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-primary-400 disabled:cursor-not-allowed disabled:bg-btn-primary-disabled"
 				>
 					{#if joining}
@@ -225,8 +235,7 @@
 						<input
 							type="text"
 							bind:value={joinCode}
-							maxlength="5"
-							inputmode="numeric"
+							maxlength="6"
 							placeholder="รหัสห้อง"
 							class="w-full bg-transparent px-3 py-2 text-sm text-gray-700 outline-none placeholder:text-gray-400"
 							onkeydown={(e) => e.key === 'Enter' && handleJoinRoom()}
@@ -234,7 +243,7 @@
 						<button
 							type="button"
 							onclick={handleJoinRoom}
-							disabled={joining || joinCode.trim().length !== 5}
+							disabled={joining || !isValidCode(joinCode.trim())}
 							class="flex items-center justify-center bg-primary-500 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-primary-400 disabled:cursor-not-allowed disabled:bg-btn-primary-disabled"
 						>
 							{#if joining}
