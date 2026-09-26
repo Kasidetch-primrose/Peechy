@@ -124,8 +124,8 @@ io.on('connection', (socket) => {
 				room: result.room,
 				players: result.players,
 				strokes: result.strokes,
-				reference: result.reference,
-				referenceController: result.referenceController
+				references: result.references,
+				referenceControllers: result.referenceControllers
 			});
 		} catch (e) {
 			callback?.({ ok: false, message: (e as Error).message });
@@ -163,43 +163,99 @@ io.on('connection', (socket) => {
 		socket.to(`draw:${code}`).emit('draw:stroke:end', { strokeId });
 	});
 
-	// Shared trace image (see draw.ts). Position/size are relayed live to the
-	// others while someone holds control; everything else is broadcast to all.
-	socket.on('draw:ref:add', async ({ code, url, aspect }: { code: string; url: unknown; aspect: unknown }) => {
-		if (!inDrawRoom(code)) return;
-		await draw.addReference(io, code, playerId, { url, aspect });
-	});
-
+	// Shared trace images / layers (see draw.ts). Position and size are relayed
+	// live to the others while someone holds an image; everything else is
+	// broadcast to all as the full (small) layer stack.
 	socket.on(
-		'draw:ref:patch',
-		async ({ code, patch }: { code: string; patch: { opacity?: unknown; locked?: unknown; visible?: unknown } }) => {
+		'draw:ref:add',
+		async ({ code, url, aspect, name }: { code: string; url: unknown; aspect: unknown; name: unknown }) => {
 			if (!inDrawRoom(code)) return;
-			await draw.patchReference(io, code, playerId, patch ?? {});
+			await draw.addReference(io, code, playerId, playerName, { url, aspect, name });
 		}
 	);
 
-	socket.on('draw:ref:grab', async ({ code }: { code: string }) => {
+	socket.on(
+		'draw:ref:patch',
+		async ({
+			code,
+			id,
+			patch
+		}: {
+			code: string;
+			id: unknown;
+			patch: { opacity?: unknown; locked?: unknown; rotation?: unknown };
+		}) => {
+			if (!inDrawRoom(code)) return;
+			await draw.patchReference(io, code, playerId, id, patch ?? {});
+		}
+	);
+
+	// Owner-only: make some/all of their images public or private in one go.
+	socket.on(
+		'draw:ref:visibility',
+		async ({ code, ids, isPublic }: { code: string; ids: unknown; isPublic: unknown }) => {
+			if (!inDrawRoom(code)) return;
+			await draw.setReferencesVisibility(io, code, playerId, ids, isPublic);
+		}
+	);
+
+	socket.on(
+		'draw:ref:reorder',
+		async ({ code, id, direction }: { code: string; id: unknown; direction: unknown }) => {
+			if (!inDrawRoom(code)) return;
+			await draw.reorderReference(io, code, playerId, id, direction);
+		}
+	);
+
+	socket.on('draw:ref:grab', async ({ code, id }: { code: string; id: unknown }) => {
 		if (!inDrawRoom(code)) return;
-		await draw.grabReference(io, code, playerId, playerName);
+		await draw.grabReference(io, code, playerId, playerName, id);
 	});
 
 	socket.on(
 		'draw:ref:move',
-		({ code, x, y, width }: { code: string; x: unknown; y: unknown; width: unknown }) => {
+		({
+			code,
+			id,
+			x,
+			y,
+			width,
+			rotation
+		}: {
+			code: string;
+			id: unknown;
+			x: unknown;
+			y: unknown;
+			width: unknown;
+			rotation: unknown;
+		}) => {
 			if (!inDrawRoom(code)) return;
-			const reference = draw.moveReference(code, playerId, { x, y, width });
-			if (reference) socket.to(`draw:${code}`).emit('draw:ref:state', { reference });
+			const reference = draw.moveReference(code, playerId, { id, x, y, width, rotation });
+			if (reference) {
+				// A private image is only ever relayed to its owner (their other tabs).
+				const audience =
+					reference.isPublic || reference.ownerId === '' ? `draw:${code}` : `player:${reference.ownerId}`;
+				socket
+					.to(audience)
+					.emit('draw:ref:moved', {
+						id: reference.id,
+						x: reference.x,
+						y: reference.y,
+						width: reference.width,
+						rotation: reference.rotation
+					});
+			}
 		}
 	);
 
-	socket.on('draw:ref:release', async ({ code }: { code: string }) => {
+	socket.on('draw:ref:release', async ({ code, id }: { code: string; id: unknown }) => {
 		if (!inDrawRoom(code)) return;
-		await draw.releaseReference(io, code, playerId);
+		await draw.releaseReference(io, code, playerId, id);
 	});
 
-	socket.on('draw:ref:delete', async ({ code }: { code: string }) => {
+	socket.on('draw:ref:delete', async ({ code, id }: { code: string; id: unknown }) => {
 		if (!inDrawRoom(code)) return;
-		await draw.deleteReference(io, code, playerId);
+		await draw.deleteReference(io, code, playerId, id);
 	});
 
 	// Clearing the canvas is a room vote (see draw.ts); there is no direct clear.

@@ -30,8 +30,10 @@ interface DrawingState {
 	clearVote: IClearVote | null;
 	clearNotice: IClearNotice | null; // outcome of the last vote, shown briefly
 	clearCooldownUntil: number; // epoch ms; no new vote can start before this
-	reference: IDrawReference | null; // the shared trace image, if any
-	refController: IRefController | null; // who is moving/resizing it right now
+	// Trace layers this player may see, bottom → top: every public one plus their own
+	// private ones (the server never sends anyone else's private layers).
+	references: IDrawReference[];
+	refControllers: Record<string, IRefController>; // imageId -> who is moving/resizing it right now
 	refNotice: { id: number; reason: RefDeniedReason; byName?: string } | null;
 }
 
@@ -46,8 +48,8 @@ const initial: DrawingState = {
 	clearVote: null,
 	clearNotice: null,
 	clearCooldownUntil: 0,
-	reference: null,
-	refController: null,
+	references: [],
+	refControllers: {},
 	refNotice: null
 };
 
@@ -88,8 +90,8 @@ export async function joinRoom(code: string): Promise<boolean> {
 		room: res.room!,
 		players: res.players ?? [],
 		initialStrokes: res.strokes ?? [],
-		reference: res.reference ?? null,
-		refController: res.referenceController ?? null
+		references: res.references ?? [],
+		refControllers: res.referenceControllers ?? {}
 	}));
 	return true;
 }
@@ -113,8 +115,8 @@ async function resyncAfterReconnect(code: string) {
 		initialStrokes: res.strokes ?? [],
 		syncVersion: s.syncVersion + 1,
 		clearVote: null,
-		reference: res.reference ?? null,
-		refController: res.referenceController ?? null
+		references: res.references ?? [],
+		refControllers: res.referenceControllers ?? {}
 	}));
 }
 
@@ -184,17 +186,23 @@ function _bindEvents() {
 		);
 	});
 
-	socket.on('draw:ref:state', ({ reference }: { reference: IDrawReference | null }) => {
-		// Deleting the image also ends any drag on it.
-		drawingStore.update((s) => ({
-			...s,
-			reference,
-			refController: reference ? s.refController : null
-		}));
+	socket.on('draw:ref:state', ({ references }: { references: IDrawReference[] }) => {
+		drawingStore.update((s) => ({ ...s, references }));
 	});
 
-	socket.on('draw:ref:control', ({ controller }: { controller: IRefController | null }) => {
-		drawingStore.update((s) => ({ ...s, refController: controller }));
+	// Live position updates from whoever is dragging a shared layer.
+	socket.on(
+		'draw:ref:moved',
+		({ id, x, y, width, rotation }: { id: string; x: number; y: number; width: number; rotation: number }) => {
+			drawingStore.update((s) => ({
+				...s,
+				references: s.references.map((r) => (r.id === id ? { ...r, x, y, width, rotation } : r))
+			}));
+		}
+	);
+
+	socket.on('draw:ref:control', ({ controllers }: { controllers: Record<string, IRefController> }) => {
+		drawingStore.update((s) => ({ ...s, refControllers: controllers }));
 	});
 
 	socket.on('draw:ref:denied', ({ reason, byName }: { reason: RefDeniedReason; byName?: string }) => {

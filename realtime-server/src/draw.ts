@@ -1,4 +1,4 @@
-import type { Server } from 'socket.io';
+﻿import type { Server } from 'socket.io';
 import * as rooms from './drawRoomManager.js';
 import { randomBytes } from 'node:crypto';
 import {
@@ -53,8 +53,8 @@ export async function joinRoom(
 	room: DrawRoomState;
 	players: DrawPlayer[];
 	strokes: Stroke[];
-	reference: DrawReference | null;
-	referenceController: { playerId: string; name: string } | null;
+	references: DrawReference[];
+	referenceControllers: Record<string, { playerId: string; name: string }>;
 } | null> {
 	const room = await rooms.getRoom(code);
 	if (!room) return null;
@@ -67,22 +67,15 @@ export async function joinRoom(
 
 	const players = await rooms.getAllPlayers(code);
 	const strokes = strokesFor(code);
-	const reference = await loadReference(code);
-	const controller = refControl.get(code);
-	return {
-		room,
-		players,
-		strokes,
-		reference,
-		referenceController: controller ? { playerId: controller.playerId, name: controller.name } : null
-	};
+	const { references, controllers } = await referenceSnapshot(code, playerId);
+	return { room, players, strokes, references, referenceControllers: controllers };
 }
 
 export async function leaveRoom(io: Server, code: string, playerId: string): Promise<void> {
 	await rooms.removePlayer(code, playerId);
 	io.to(`draw:${code}`).emit('draw:room:playerLeft', { playerId });
 	dropVoter(io, code, playerId);
-	await releaseReference(io, code, playerId);
+	await releaseAllReferences(io, code, playerId);
 }
 
 export function startStroke(code: string, stroke: Stroke): void {
@@ -243,17 +236,22 @@ export async function handleDisconnect(io: Server, code: string, playerId: strin
 	await rooms.setPlayer(code, player);
 	io.to(`draw:${code}`).emit('draw:room:playerLeft', { playerId });
 	dropVoter(io, code, playerId);
-	await releaseReference(io, code, playerId);
+	await releaseAllReferences(io, code, playerId);
 }
 
-// ── Shared trace image ────────────────────────────────────────────────────
-// One reference image per room that everyone can adjust. Opacity / lock /
-// visibility are plain last-writer-wins edits. Moving and resizing go through
-// a short-lived "control" so two people can't fight over the position: the
-// first to grab it drives it until they let go (or go quiet for a few seconds).
+// ── Trace-image layers ────────────────────────────────────────────────────
+// Each room keeps an ordered stack of reference images (index 0 = bottom);
+// strokes are always drawn above all of them. Every image is uploaded by
+// someone (its owner) and starts PRIVATE: the server only ever sends it to the
+// owner. The owner can flip it public, after which everyone sees it and can
+// move/resize/rotate/lock/delete it. Moving/resizing goes through a short-lived
+// per-image "control" so two people can't fight over one image: the first to
+// grab it drives it until they let go (or go quiet for a few seconds).
 
 const REF_CONTROL_MS = 8_000;
-const roomReferences = new Map<string, DrawReference | null>();
+const MAX_REFERENCES_PER_OWNER = 8;
+const MAX_REFERENCES_PER_ROOM = 32;
+const roomReferences = new Map<string, DrawReference[]>();
 const roomPaperRatio = new Map<string, number>(); // paper width / height
 
 interface RefControl {
@@ -262,16 +260,39 @@ interface RefControl {
 	timer: NodeJS.Timeout;
 	release: () => void; // frees control and tells the room (also used by the idle timer)
 }
-const refControl = new Map<string, RefControl>();
+const refControl = new Map<string, Map<string, RefControl>>(); // room -> imageId -> control
 
 const PAPER_RATIO: Record<DrawRatio, number> = { '4:3': 4 / 3, '16:9': 16 / 9, '1:1': 1, '3:4': 3 / 4 };
 
 const clamp = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
 const isNum = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n);
+// Any angle -> degrees in (-180, 180].
+const normalizeAngle = (deg: number) => {
+	const wrapped = ((((deg + 180) % 360) + 360) % 360) - 180;
+	return wrapped === -180 ? 180 : wrapped;
+};
 
-async function loadReference(code: string): Promise<DrawReference | null> {
-	if (!roomReferences.has(code)) roomReferences.set(code, await rooms.getReference(code));
-	return roomReferences.get(code) ?? null;
+// Who may see (and therefore edit) a layer: everyone if it's public, otherwise its owner.
+const canSee = (r: DrawReference, viewerId: string) => r.isPublic || r.ownerId === '' || r.ownerId === viewerId;
+// Only the owner decides public/private (legacy ownerless images: anyone).
+const canChangeVisibility = (r: DrawReference, actorId: string) => r.ownerId === '' || r.ownerId === actorId;
+
+// The edits below are read → await → write steps, so two arriving at once would
+// each start from the same old list and overwrite the other. Run all edits for a
+// room one at a time.
+const refQueues = new Map<string, Promise<unknown>>();
+function serialize<T>(code: string, task: () => Promise<T>): Promise<T> {
+	const run = (refQueues.get(code) ?? Promise.resolve()).then(task, task);
+	refQueues.set(
+		code,
+		run.catch(() => undefined)
+	);
+	return run;
+}
+
+async function loadReferences(code: string): Promise<DrawReference[]> {
+	if (!roomReferences.has(code)) roomReferences.set(code, await rooms.getReferences(code));
+	return roomReferences.get(code) ?? [];
 }
 
 async function paperRatioOf(code: string): Promise<number> {
@@ -292,48 +313,83 @@ function isAllowedImageUrl(url: unknown): url is string {
 	return base ? url.startsWith(`${base}/`) : url.startsWith('https://');
 }
 
-function refDenied(io: Server, playerId: string, reason: 'locked' | 'busy' | 'invalid', byName?: string): void {
+function cleanName(name: unknown): string {
+	if (typeof name !== 'string') return 'รูปต้นแบบ';
+	const trimmed = name.replace(/[\u0000-\u001f]/g, '').trim().slice(0, 40);
+	return trimmed || 'รูปต้นแบบ';
+}
+
+type RefDeniedReason = 'locked' | 'busy' | 'invalid' | 'limit';
+
+function refDenied(io: Server, playerId: string, reason: RefDeniedReason, byName?: string): void {
 	io.to(`player:${playerId}`).emit('draw:ref:denied', { reason, byName });
 }
 
-function emitRefControl(io: Server, code: string): void {
-	const control = refControl.get(code);
-	io.to(`draw:${code}`).emit('draw:ref:control', {
-		controller: control ? { playerId: control.playerId, name: control.name } : null
-	});
+const viewerOf = (socket: { handshake: { auth: Record<string, unknown> } }) => String(socket.handshake.auth.playerId ?? '');
+
+function controllersFor(code: string, viewerId: string): Record<string, { playerId: string; name: string }> {
+	const references = roomReferences.get(code) ?? [];
+	const out: Record<string, { playerId: string; name: string }> = {};
+	for (const [id, c] of refControl.get(code) ?? []) {
+		const layer = references.find((r) => r.id === id);
+		if (layer && canSee(layer, viewerId)) out[id] = { playerId: c.playerId, name: c.name };
+	}
+	return out;
 }
 
-function clearRefControl(code: string): void {
-	const control = refControl.get(code);
+// State is sent per viewer: a private layer never leaves the server for anyone but its owner.
+async function emitRefState(io: Server, code: string): Promise<void> {
+	const references = roomReferences.get(code) ?? [];
+	for (const socket of await io.in(`draw:${code}`).fetchSockets()) {
+		const viewerId = viewerOf(socket);
+		socket.emit('draw:ref:state', { references: references.filter((r) => canSee(r, viewerId)) });
+	}
+}
+
+async function emitRefControl(io: Server, code: string): Promise<void> {
+	for (const socket of await io.in(`draw:${code}`).fetchSockets()) {
+		socket.emit('draw:ref:control', { controllers: controllersFor(code, viewerOf(socket)) });
+	}
+}
+
+function clearRefControl(code: string, id: string): void {
+	const controls = refControl.get(code);
+	const control = controls?.get(id);
 	if (control) clearTimeout(control.timer);
-	refControl.delete(code);
+	controls?.delete(id);
 }
 
-async function saveReference(io: Server, code: string, reference: DrawReference | null): Promise<void> {
-	roomReferences.set(code, reference);
-	await rooms.setReference(code, reference);
-	io.to(`draw:${code}`).emit('draw:ref:state', { reference });
+async function saveReferences(io: Server, code: string, references: DrawReference[]): Promise<void> {
+	roomReferences.set(code, references);
+	await rooms.setReferences(code, references);
+	await emitRefState(io, code);
 }
 
-export async function addReference(
+// For the join ack: only what this viewer may see, plus who is dragging those layers.
+export async function referenceSnapshot(code: string, viewerId: string) {
+	const references = await loadReferences(code);
+	return {
+		references: references.filter((r) => canSee(r, viewerId)),
+		controllers: controllersFor(code, viewerId)
+	};
+}
+
+async function addReferenceNow(
 	io: Server,
 	code: string,
 	playerId: string,
-	input: { url?: unknown; aspect?: unknown }
+	playerName: string,
+	input: { url?: unknown; aspect?: unknown; name?: unknown }
 ): Promise<void> {
 	const { url, aspect } = input;
 	if (!isAllowedImageUrl(url) || !isNum(aspect) || aspect < 0.05 || aspect > 20) {
 		refDenied(io, playerId, 'invalid');
 		return;
 	}
-	const current = await loadReference(code);
-	if (current?.locked) {
-		refDenied(io, playerId, 'locked');
-		return;
-	}
-	const control = refControl.get(code);
-	if (control && control.playerId !== playerId) {
-		refDenied(io, playerId, 'busy', control.name);
+	const references = await loadReferences(code);
+	const mine = references.filter((r) => r.ownerId === playerId).length;
+	if (mine >= MAX_REFERENCES_PER_OWNER || references.length >= MAX_REFERENCES_PER_ROOM) {
+		refDenied(io, playerId, 'limit');
 		return;
 	}
 
@@ -344,69 +400,149 @@ export async function addReference(
 	const reference: DrawReference = {
 		id: randomBytes(6).toString('hex'),
 		url,
+		name: cleanName(input.name),
 		x: (1 - width) / 2,
 		y: (1 - height) / 2,
 		width,
 		aspect,
+		rotation: 0,
 		opacity: 0.4,
 		locked: false,
-		visible: true
+		ownerId: playerId,
+		ownerName: playerName.slice(0, 40),
+		isPublic: true // shared by default; the owner can make it private later
 	};
-	clearRefControl(code);
-	emitRefControl(io, code);
-	await saveReference(io, code, reference);
+	await saveReferences(io, code, [...references, reference]); // new layers go on top of the stack
 }
 
-export async function patchReference(
+async function patchReferenceNow(
 	io: Server,
 	code: string,
 	playerId: string,
-	patch: { opacity?: unknown; locked?: unknown; visible?: unknown }
+	id: unknown,
+	patch: { opacity?: unknown; locked?: unknown; rotation?: unknown }
 ): Promise<void> {
-	const current = await loadReference(code);
-	if (!current) return;
-	const next = { ...current };
+	const references = await loadReferences(code);
+	const index = references.findIndex((r) => r.id === id && canSee(r, playerId));
+	if (index < 0) return;
+	const next = { ...references[index] };
 	if (isNum(patch.opacity)) next.opacity = clamp(patch.opacity, 0.05, 1);
-	if (typeof patch.visible === 'boolean') next.visible = patch.visible;
 	if (typeof patch.locked === 'boolean') next.locked = patch.locked;
+	if (isNum(patch.rotation)) {
+		// Rotating is an edit of the image's position, so it follows the same rules as moving it.
+		const control = refControl.get(code)?.get(next.id);
+		if (references[index].locked) {
+			refDenied(io, playerId, 'locked');
+			return;
+		}
+		if (control && control.playerId !== playerId) {
+			refDenied(io, playerId, 'busy', control.name);
+			return;
+		}
+		next.rotation = normalizeAngle(patch.rotation);
+	}
 
 	// Locking freezes the image, so whoever was dragging it has to let go.
-	if (next.locked && refControl.has(code)) {
-		clearRefControl(code);
-		emitRefControl(io, code);
+	if (next.locked && refControl.get(code)?.has(next.id)) {
+		clearRefControl(code, next.id);
+		await emitRefControl(io, code);
 	}
-	await saveReference(io, code, next);
+	const updated = [...references];
+	updated[index] = next;
+	await saveReferences(io, code, updated);
 }
 
-export async function grabReference(io: Server, code: string, playerId: string, name: string): Promise<void> {
-	const reference = await loadReference(code);
+// Owner-only: make several of their images public/private in one go ("select all").
+async function setVisibilityNow(
+	io: Server,
+	code: string,
+	playerId: string,
+	ids: unknown,
+	isPublic: unknown
+): Promise<void> {
+	if (!Array.isArray(ids) || typeof isPublic !== 'boolean') return;
+	const wanted = new Set(ids.slice(0, 64).filter((v): v is string => typeof v === 'string'));
+	const references = await loadReferences(code);
+	let changed = false;
+	let controlChanged = false;
+	const updated = references.map((r) => {
+		if (!wanted.has(r.id) || !canChangeVisibility(r, playerId) || r.isPublic === isPublic) return r;
+		changed = true;
+		// Hiding an image from everyone else ends any drag someone else was doing on it.
+		const control = refControl.get(code)?.get(r.id);
+		if (!isPublic && control && control.playerId !== r.ownerId) {
+			clearRefControl(code, r.id);
+			controlChanged = true;
+		}
+		return { ...r, isPublic };
+	});
+	if (!changed) return;
+	await saveReferences(io, code, updated);
+	if (controlChanged) await emitRefControl(io, code);
+}
+
+async function reorderReferenceNow(
+	io: Server,
+	code: string,
+	playerId: string,
+	id: unknown,
+	direction: unknown
+): Promise<void> {
+	if (direction !== 'up' && direction !== 'down') return;
+	const references = await loadReferences(code);
+	const index = references.findIndex((r) => r.id === id && canSee(r, playerId));
+	if (index < 0) return;
+	// Swap with the next layer this player can actually see (others' private ones don't count).
+	const step = direction === 'up' ? 1 : -1;
+	let target = index + step;
+	while (target >= 0 && target < references.length && !canSee(references[target], playerId)) target += step;
+	if (target < 0 || target >= references.length) return;
+	const updated = [...references];
+	[updated[index], updated[target]] = [updated[target], updated[index]];
+	await saveReferences(io, code, updated);
+}
+
+export async function grabReference(
+	io: Server,
+	code: string,
+	playerId: string,
+	name: string,
+	id: unknown
+): Promise<void> {
+	const references = await loadReferences(code);
+	const reference = references.find((r) => r.id === id && canSee(r, playerId));
 	if (!reference) return;
 	if (reference.locked) {
 		refDenied(io, playerId, 'locked');
 		return;
 	}
-	const control = refControl.get(code);
+	const controls = refControl.get(code) ?? new Map<string, RefControl>();
+	refControl.set(code, controls);
+	const control = controls.get(reference.id);
 	if (control && control.playerId !== playerId) {
 		refDenied(io, playerId, 'busy', control.name);
 		return;
 	}
 	await paperRatioOf(code); // warm the cache so moveReference can stay synchronous
 	if (control) clearTimeout(control.timer);
-	const release = () => void releaseReference(io, code, playerId);
-	refControl.set(code, { playerId, name, release, timer: setTimeout(release, REF_CONTROL_MS) });
-	emitRefControl(io, code);
+	const release = () => void releaseReference(io, code, playerId, reference.id);
+	controls.set(reference.id, { playerId, name, release, timer: setTimeout(release, REF_CONTROL_MS) });
+	await emitRefControl(io, code);
 }
 
 // Synchronous on purpose: this runs for every pointer move while dragging.
-// Returns the updated reference (to relay to the other players) or null.
+// Returns the updated image (to relay to whoever can see it) or null.
 export function moveReference(
 	code: string,
 	playerId: string,
-	input: { x?: unknown; y?: unknown; width?: unknown }
+	input: { id?: unknown; x?: unknown; y?: unknown; width?: unknown; rotation?: unknown }
 ): DrawReference | null {
-	const control = refControl.get(code);
-	const reference = roomReferences.get(code);
-	if (!control || control.playerId !== playerId || !reference || reference.locked) return null;
+	const control = refControl.get(code)?.get(String(input.id));
+	const references = roomReferences.get(code);
+	const index = references?.findIndex((r) => r.id === input.id) ?? -1;
+	if (!control || control.playerId !== playerId || !references || index < 0) return null;
+	const reference = references[index];
+	if (reference.locked || !canSee(reference, playerId)) return null;
 	if (!isNum(input.x) || !isNum(input.y) || !isNum(input.width)) return null;
 
 	const paperRatio = roomPaperRatio.get(code) ?? 1;
@@ -417,9 +553,10 @@ export function moveReference(
 		...reference,
 		width,
 		x: clamp(input.x, -width + 0.1, 0.9),
-		y: clamp(input.y, -height + 0.1, 0.9)
+		y: clamp(input.y, -height + 0.1, 0.9),
+		rotation: isNum(input.rotation) ? normalizeAngle(input.rotation) : reference.rotation
 	};
-	roomReferences.set(code, next);
+	references[index] = next;
 
 	// Went quiet (tab closed mid-drag, lost connection): free it for everyone.
 	clearTimeout(control.timer);
@@ -427,33 +564,90 @@ export function moveReference(
 	return next;
 }
 
-export async function releaseReference(io: Server, code: string, playerId: string): Promise<void> {
-	const control = refControl.get(code);
+async function releaseReferenceNow(io: Server, code: string, playerId: string, id: unknown): Promise<void> {
+	const control = refControl.get(code)?.get(String(id));
 	if (!control || control.playerId !== playerId) return;
-	clearRefControl(code);
-	emitRefControl(io, code);
+	clearRefControl(code, String(id));
+	await emitRefControl(io, code);
 	// Moves are relayed to everyone except the mover, so publish the final
-	// position to all (it corrects any dropped move) and persist it.
-	const reference = roomReferences.get(code);
-	if (reference) {
-		await rooms.setReference(code, reference);
-		io.to(`draw:${code}`).emit('draw:ref:state', { reference });
+	// stack (it corrects any dropped move) and persist it.
+	const references = roomReferences.get(code);
+	if (references) await saveReferences(io, code, references);
+}
+
+// A player left or dropped: hand back everything they were dragging.
+export async function releaseAllReferences(io: Server, code: string, playerId: string): Promise<void> {
+	for (const [id, control] of [...(refControl.get(code) ?? [])]) {
+		if (control.playerId === playerId) await releaseReference(io, code, playerId, id);
 	}
 }
 
-export async function deleteReference(io: Server, code: string, playerId: string): Promise<void> {
-	const reference = await loadReference(code);
+async function deleteReferenceNow(io: Server, code: string, playerId: string, id: unknown): Promise<void> {
+	const references = await loadReferences(code);
+	const reference = references.find((r) => r.id === id && canSee(r, playerId));
 	if (!reference) return;
 	if (reference.locked) {
 		refDenied(io, playerId, 'locked');
 		return;
 	}
-	const control = refControl.get(code);
+	const control = refControl.get(code)?.get(reference.id);
 	if (control && control.playerId !== playerId) {
 		refDenied(io, playerId, 'busy', control.name);
 		return;
 	}
-	clearRefControl(code);
-	emitRefControl(io, code);
-	await saveReference(io, code, null);
+	clearRefControl(code, reference.id);
+	await emitRefControl(io, code);
+	await saveReferences(
+		io,
+		code,
+		references.filter((r) => r.id !== reference.id)
+	);
+}
+
+export function addReference(
+	io: Server,
+	code: string,
+	playerId: string,
+	playerName: string,
+	input: { url?: unknown; aspect?: unknown; name?: unknown }
+): Promise<void> {
+	return serialize(code, () => addReferenceNow(io, code, playerId, playerName, input));
+}
+
+export function patchReference(
+	io: Server,
+	code: string,
+	playerId: string,
+	id: unknown,
+	patch: { opacity?: unknown; locked?: unknown; rotation?: unknown }
+): Promise<void> {
+	return serialize(code, () => patchReferenceNow(io, code, playerId, id, patch));
+}
+
+export function setReferencesVisibility(
+	io: Server,
+	code: string,
+	playerId: string,
+	ids: unknown,
+	isPublic: unknown
+): Promise<void> {
+	return serialize(code, () => setVisibilityNow(io, code, playerId, ids, isPublic));
+}
+
+export function reorderReference(
+	io: Server,
+	code: string,
+	playerId: string,
+	id: unknown,
+	direction: unknown
+): Promise<void> {
+	return serialize(code, () => reorderReferenceNow(io, code, playerId, id, direction));
+}
+
+export function deleteReference(io: Server, code: string, playerId: string, id: unknown): Promise<void> {
+	return serialize(code, () => deleteReferenceNow(io, code, playerId, id));
+}
+
+export function releaseReference(io: Server, code: string, playerId: string, id: unknown): Promise<void> {
+	return serialize(code, () => releaseReferenceNow(io, code, playerId, id));
 }

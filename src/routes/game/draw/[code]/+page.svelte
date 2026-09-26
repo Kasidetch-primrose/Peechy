@@ -1,4 +1,4 @@
-<script lang="ts">
+﻿<script lang="ts">
 	import { onDestroy } from 'svelte';
 	import { get } from 'svelte/store';
 	import { fade, fly, scale } from 'svelte/transition';
@@ -7,13 +7,13 @@
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
 	import { authUserStore } from '$lib/data/stores/authUser';
-	import { connect, joinRoom, leaveRoom, drawingStore } from '$lib/data/stores/drawing';
+	import { connect, drawingStore, joinRoom, leaveRoom } from '$lib/data/stores/drawing';
 	import DrawingService from '$lib/data/services/multiplayer/drawing';
 	import DrawCanvas from '$lib/components/DrawCanvas.svelte';
 	import GuestNameModal from '$lib/components/GuestNameModal.svelte';
 	import ClearVotePrompt from '$lib/components/ClearVotePrompt.svelte';
 	import { getGuestId, saveGuestName } from '$lib/utils/guest-identity';
-	import type { DrawTool } from '$lib/data/interface/drawing';
+	import type { DrawTool, IDrawReference } from '$lib/data/interface/drawing';
 
 	const code = $derived(page.params.code ?? '');
 	const selfId = $derived($drawingStore.selfId);
@@ -21,76 +21,220 @@
 	let canUndo = $state(false);
 	let showClearConfirm = $state(false);
 
-	// ── Shared trace image ─────────────────────────────────────────────────
+	// ── Trace-image layers (Photoshop-style) ───────────────────────────────
+	// Every image is uploaded to the room by someone — its owner — and starts PRIVATE:
+	// the server only sends it to the owner. The owner can make it public (everyone
+	// sees and can adjust it) or private again, one at a time or via "select all".
+	// The drawing is always above all the layers.
 	let showRefPanel = $state(false);
-	let showRefDeleteConfirm = $state(false);
-	let refEditing = $state(false); // this player is positioning the image (drawing off for them only)
+	let refPanelWrap = $state<HTMLElement | null>(null);
+	let selectedRefId = $state<string | null>(null); // the layer being adjusted (opacity, rotation, position…)
+	let checkedIds = $state<string[]>([]); // tick boxes for the bulk public/private buttons
+	let deleteTarget = $state<IDrawReference | null>(null);
 	let uploading = $state(false);
+	// Images that are still uploading: shown in the layer list with a spinner (local preview).
+	let pendingUploads = $state<{ key: number; name: string; preview: string }[]>([]);
+	let pendingKey = 0;
 	let fileInput = $state<HTMLInputElement>();
-	let opacityDraft = $state<number | null>(null); // slider position while dragging it
+	let awaitingNewLayer = $state(false); // select the layer the server is about to add
+	let layerCountBefore = 0;
 
-	const reference = $derived($drawingStore.reference);
-	const refController = $derived($drawingStore.refController);
-	const refBusyByOther = $derived(!!refController && refController.playerId !== selfId);
+	const layers = $derived($drawingStore.references); // bottom → top, only what this player may see
+	const refControllers = $derived($drawingStore.refControllers);
 	const refNotice = $derived($drawingStore.refNotice);
 
-	// Locked (trace mode), hidden or deleted images can't be positioned; picking a
-	// drawing tool also means "I want to draw now".
+	// Eye toggle (Photoshop style): only hides the image on THIS screen, nobody else is affected.
+	let hiddenIds = $state<string[]>([]);
+	const visibleLayers = $derived(layers.filter((l) => !hiddenIds.includes(l.id)));
+	const anyVisible = $derived(visibleLayers.length > 0);
+	function toggleHidden(id: string) {
+		hiddenIds = hiddenIds.includes(id) ? hiddenIds.filter((x) => x !== id) : [...hiddenIds, id];
+		if (selectedRefId === id && hiddenIds.includes(id)) selectedRefId = null;
+	}
+	// One button: if anything is showing, hide everything first; otherwise show everything.
+	function toggleAllHidden() {
+		if (anyVisible) {
+			hiddenIds = layers.map((l) => l.id);
+			selectedRefId = null;
+		} else {
+			hiddenIds = [];
+		}
+	}
 	$effect(() => {
-		if (!reference || reference.locked || !reference.visible) refEditing = false;
+		const ids = new Set(layers.map((l) => l.id));
+		if (hiddenIds.some((id) => !ids.has(id))) hiddenIds = hiddenIds.filter((id) => ids.has(id));
+	});
+	const layerList = $derived([...layers].reverse()); // panel order: top first
+	const canSetVisibility = (layer: IDrawReference) => layer.ownerId === '' || layer.ownerId === selfId;
+	const myLayers = $derived(layers.filter(canSetVisibility));
+	const checkedMine = $derived(myLayers.filter((l) => checkedIds.includes(l.id)));
+	const allMineChecked = $derived(myLayers.length > 0 && checkedMine.length === myLayers.length);
+	const selected = $derived(layers.find((l) => l.id === selectedRefId) ?? null);
+	const selectedBusy = $derived(
+		!!selected && !!refControllers[selected.id] && refControllers[selected.id].playerId !== selfId
+	);
+
+	// Selection follows the layers around: deselect when one is deleted or made
+	// private by its owner, stop positioning when it gets locked, and picking a
+	// drawing tool means "I want to draw now".
+	$effect(() => {
+		if (selectedRefId && !selected) selectedRefId = null;
 	});
 	$effect(() => {
-		void tool;
-		refEditing = false;
+		const ids = new Set(myLayers.map((l) => l.id));
+		if (checkedIds.some((id) => !ids.has(id))) checkedIds = checkedIds.filter((id) => ids.has(id));
 	});
-	async function handleRefFile(e: Event) {
+	// The layer we just uploaded shows up when the server sends the new stack:
+	// select it and start positioning it.
+	$effect(() => {
+		if (awaitingNewLayer && layers.length > layerCountBefore) {
+			const mine = layers.filter((l) => l.ownerId === selfId);
+			if (mine.length === 0) return;
+			awaitingNewLayer = false;
+			selectedRefId = mine[mine.length - 1].id;
+		}
+	});
+
+	async function handleRefFiles(e: Event) {
 		const input = e.currentTarget as HTMLInputElement;
-		const file = input.files?.[0];
+		const files = Array.from(input.files ?? []);
 		input.value = ''; // let the same file be picked again later
-		if (!file) return;
+		if (files.length === 0) return;
 		uploading = true;
+		const queued = files.map((file) => ({
+			key: ++pendingKey,
+			name: file.name,
+			preview: URL.createObjectURL(file)
+		}));
+		pendingUploads = [...pendingUploads, ...queued];
 		try {
-			const { url, aspect } = await uploadReferenceImage(file);
-			DrawingService.refAdd(code, url, aspect);
-			refEditing = true; // the uploader positions it first
-		} catch (err) {
-			showToast((err as Error).message);
+			for (const [i, file] of files.entries()) {
+				try {
+					const image = await uploadReferenceImage(file);
+					layerCountBefore = get(drawingStore).references.length;
+					awaitingNewLayer = true;
+					DrawingService.refAdd(code, image.url, image.aspect, image.name);
+				} catch (err) {
+					showToast(`${file.name}: ${(err as Error).message}`);
+				} finally {
+					const done = queued[i];
+					pendingUploads = pendingUploads.filter((p) => p.key !== done.key);
+					URL.revokeObjectURL(done.preview);
+				}
+			}
 		} finally {
 			uploading = false;
 		}
 	}
 
-	let opacityTimer: ReturnType<typeof setTimeout> | undefined;
-	let pendingOpacity: number | null = null;
-	function sendOpacity(value: number) {
-		pendingOpacity = value;
-		if (opacityTimer) return; // at most one update per ~60ms while sliding
-		opacityTimer = setTimeout(() => {
-			opacityTimer = undefined;
-			if (pendingOpacity !== null) DrawingService.refPatch(code, { opacity: pendingOpacity });
-			pendingOpacity = null;
-		}, 60);
+	// ── public / private ("who can see this image") ──
+	function setVisibility(ids: string[], isPublic: boolean) {
+		if (ids.length > 0) DrawingService.refSetVisibility(code, ids, isPublic);
 	}
-	function commitOpacity() {
+
+	function toggleChecked(id: string) {
+		checkedIds = checkedIds.includes(id) ? checkedIds.filter((c) => c !== id) : [...checkedIds, id];
+	}
+
+	// "Select all" covers just the images this player is allowed to change.
+	function toggleAllMine() {
+		checkedIds = allMineChecked ? [] : myLayers.map((l) => l.id);
+	}
+
+	function canMove(layer: IDrawReference, direction: 'up' | 'down'): boolean {
+		const index = layers.findIndex((r) => r.id === layer.id);
+		return direction === 'up' ? index >= 0 && index < layers.length - 1 : index > 0;
+	}
+
+	function moveLayer(layer: IDrawReference, direction: 'up' | 'down') {
+		DrawingService.refReorder(code, layer.id, direction);
+	}
+
+	// Opacity: at most one update per ~60ms while sliding, plus a final one on release.
+	let opacityDraft = $state<{ id: string; value: number } | null>(null);
+	let opacityTimer: ReturnType<typeof setTimeout> | undefined;
+	let pendingOpacity: { id: string; value: number } | null = null;
+
+	function flushOpacity() {
 		clearTimeout(opacityTimer);
 		opacityTimer = undefined;
-		if (pendingOpacity !== null) DrawingService.refPatch(code, { opacity: pendingOpacity });
+		if (pendingOpacity) DrawingService.refPatch(code, pendingOpacity.id, { opacity: pendingOpacity.value });
 		pendingOpacity = null;
+	}
+
+	function setOpacity(layer: IDrawReference, value: number) {
+		opacityDraft = { id: layer.id, value };
+		pendingOpacity = { id: layer.id, value };
+		if (!opacityTimer) opacityTimer = setTimeout(flushOpacity, 60);
+	}
+
+	function commitOpacity() {
+		flushOpacity();
 		opacityDraft = null;
 	}
 
-	function confirmDeleteReference() {
-		showRefDeleteConfirm = false;
-		DrawingService.refDelete(code);
+	function shownOpacity(layer: IDrawReference): number {
+		return opacityDraft && opacityDraft.id === layer.id ? opacityDraft.value : layer.opacity;
+	}
+
+	// Rotation (degrees, clockwise, -180..180): same routing as opacity, but the
+	// server refuses it while the layer is locked or someone else is dragging it.
+	let rotationDraft = $state<{ id: string; value: number } | null>(null);
+	let rotationTimer: ReturnType<typeof setTimeout> | undefined;
+	let pendingRotation: { id: string; value: number } | null = null;
+
+	const normalizeAngle = (deg: number) => {
+		const wrapped = ((((deg + 180) % 360) + 360) % 360) - 180;
+		return wrapped === -180 ? 180 : wrapped;
+	};
+
+	function flushRotation() {
+		clearTimeout(rotationTimer);
+		rotationTimer = undefined;
+		if (pendingRotation) DrawingService.refPatch(code, pendingRotation.id, { rotation: pendingRotation.value });
+		pendingRotation = null;
+	}
+
+	function setRotation(layer: IDrawReference, degrees: number) {
+		const value = normalizeAngle(degrees);
+		rotationDraft = { id: layer.id, value };
+		pendingRotation = { id: layer.id, value };
+		if (!rotationTimer) rotationTimer = setTimeout(flushRotation, 60);
+	}
+
+	function commitRotation() {
+		flushRotation();
+		rotationDraft = null;
+	}
+
+	function shownRotation(layer: IDrawReference): number {
+		return rotationDraft && rotationDraft.id === layer.id ? rotationDraft.value : layer.rotation;
+	}
+
+	// Buttons: a single, immediate change (no draft/throttle needed).
+	function rotateBy(layer: IDrawReference, deltaDegrees: number | null) {
+		const value = deltaDegrees === null ? 0 : normalizeAngle(layer.rotation + deltaDegrees);
+		DrawingService.refPatch(code, layer.id, { rotation: value });
+	}
+
+	function toggleLock(layer: IDrawReference) {
+		DrawingService.refPatch(code, layer.id, { locked: !layer.locked });
+	}
+
+	function confirmDeleteLayer() {
+		const layer = deleteTarget;
+		deleteTarget = null;
+		if (layer) DrawingService.refDelete(code, layer.id);
 	}
 
 	const refNoticeText = $derived.by(() => {
 		if (!refNotice) return '';
 		if (refNotice.reason === 'busy') return `${refNotice.byName ?? 'เพื่อน'} กำลังจัดรูปอยู่`;
-		if (refNotice.reason === 'locked') return '🔒 รูปต้นแบบถูกล็อกอยู่ ปลดล็อกก่อนถึงจะแก้ได้';
+		if (refNotice.reason === 'locked') return '🔒 เลเยอร์นี้ถูกล็อกอยู่ ปลดล็อกก่อนถึงจะแก้ได้';
+		if (refNotice.reason === 'limit') return 'อัปโหลดรูปต้นแบบได้สูงสุดคนละ 8 รูป';
 		return 'รูปนี้ใช้ไม่ได้';
 	});
-	// The server refused an edit (someone else is dragging / image is locked).
+	// The server refused an edit (someone else is dragging / layer is locked / too many).
 	$effect(() => {
 		if (refNotice) showToast(refNoticeText);
 	});
@@ -190,6 +334,7 @@
 	}
 
 	function handleKeydown(e: KeyboardEvent) {
+		if (e.key === 'Escape' && showRefPanel && !deleteTarget) showRefPanel = false;
 		if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.key.toLowerCase() !== 'z') return;
 		const target = e.target as HTMLElement | null;
 		if (target && ['INPUT', 'TEXTAREA'].includes(target.tagName)) return;
@@ -263,7 +408,14 @@
 	}
 </script>
 
-<svelte:window onkeydown={handleKeydown} />
+<svelte:window
+	onkeydown={handleKeydown}
+	onpointerdown={(e) => {
+		// Click / tap anywhere outside the layers panel (and its delete dialog) closes it.
+		if (!showRefPanel || deleteTarget) return;
+		if (refPanelWrap && !refPanelWrap.contains(e.target as Node)) showRefPanel = false;
+	}}
+/>
 
 <GuestNameModal
 	bind:open={showGuestModal}
@@ -286,7 +438,7 @@
 	</div>
 {/if}
 
-{#if showRefDeleteConfirm}
+{#if deleteTarget}
 	<div
 		transition:fade={{ duration: motion(180) }}
 		class="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm"
@@ -297,22 +449,28 @@
 			transition:scale={{ start: 0.94, duration: motion(200) }}
 			class="mx-4 w-full max-w-[26rem] rounded-2xl bg-white p-6 shadow-xl"
 		>
-			<h3 class="text-base font-semibold text-gray-900">ลบรูปต้นแบบ?</h3>
-			<p class="mt-1 text-sm text-gray-500">รูปนี้จะหายไปจากหน้าจอของทุกคนในห้อง (เส้นที่วาดไว้แล้วไม่ถูกลบ)</p>
+			<h3 class="text-base font-semibold text-gray-900">ลบเลเยอร์ "{deleteTarget.name}"?</h3>
+			<p class="mt-1 text-sm text-gray-500">
+				{#if deleteTarget.isPublic}
+					รูปนี้จะหายไปจากหน้าจอของทุกคนในห้อง (เส้นที่วาดไว้แล้วไม่ถูกลบ)
+				{:else}
+					รูปนี้จะถูกลบออกจากห้อง (เส้นที่วาดไว้แล้วไม่ถูกลบ)
+				{/if}
+			</p>
 			<div class="mt-5 flex gap-3">
 				<button
 					type="button"
-					onclick={() => (showRefDeleteConfirm = false)}
+					onclick={() => (deleteTarget = null)}
 					class="flex-1 cursor-pointer rounded-xl border border-gray-200 py-2 text-sm font-medium text-gray-700 transition-all hover:border-gray-300 hover:bg-gray-100 active:scale-95"
 				>
 					ยกเลิก
 				</button>
 				<button
 					type="button"
-					onclick={confirmDeleteReference}
+					onclick={confirmDeleteLayer}
 					class="flex-1 cursor-pointer rounded-xl bg-red-500 py-2 text-sm font-semibold text-white transition-all hover:bg-red-400 hover:shadow-md active:scale-95"
 				>
-					ลบรูป
+					ลบเลเยอร์
 				</button>
 			</div>
 		</div>
@@ -468,9 +626,16 @@
 					{strokeWidth}
 					bind:canUndo
 					syncVersion={$drawingStore.syncVersion}
-					{reference}
-					{refController}
-					{refEditing}
+					layers={visibleLayers}
+					{refControllers}
+					selectedId={selectedRefId}
+					blockDraw={showRefPanel}
+					onSelect={(id) => (selectedRefId = id)}
+					onLock={(id) => {
+						const l = layers.find((x) => x.id === id);
+						if (l) toggleLock(l);
+						selectedRefId = null;
+					}}
 				/>
 			{/if}
 		</div>
@@ -553,8 +718,8 @@
 				></span>
 			</div>
 
-			<!-- Shared trace image controls -->
-			<div class="relative">
+			<!-- Trace-image layers -->
+			<div class="relative" bind:this={refPanelWrap}>
 				<button
 					type="button"
 					onclick={() => (showRefPanel = !showRefPanel)}
@@ -563,126 +728,350 @@
 						? 'border-primary-500 bg-primary-100/60 text-primary-600'
 						: 'border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-100'}"
 				>
-					🖼 รูปต้นแบบ
-					{#if reference}
-						<span class="text-[10px]">{reference.locked ? '🔒' : '●'}</span>
+					{#if uploading}
+						<span class="h-3 w-3 animate-spin rounded-full border-2 border-primary-200 border-t-primary-500" aria-label="กำลังอัปโหลดรูป"></span>
+					{/if}
+					🖼 เลเยอร์
+					{#if layers.length > 0}
+						<span class="rounded-full bg-primary-500 px-1.5 text-[10px] leading-4 text-white">{layers.length}</span>
 					{/if}
 				</button>
 
 				{#if showRefPanel}
 					<div
 						transition:fly={{ y: 10, duration: motion(180) }}
-						class="absolute right-0 bottom-full z-40 mb-2 w-[min(19rem,calc(100vw-1.5rem))] rounded-2xl border border-primary-100 bg-white p-4 shadow-xl"
+						class="absolute right-0 bottom-full z-40 mb-2 flex max-h-[min(34rem,70vh)] w-[min(21rem,calc(100vw-1.5rem))] flex-col overflow-y-auto rounded-2xl border border-primary-100 bg-white p-4 shadow-xl"
 					>
 						<input
 							bind:this={fileInput}
 							type="file"
 							accept="image/png,image/jpeg,image/webp"
+							multiple
 							class="hidden"
-							onchange={handleRefFile}
+							onchange={handleRefFiles}
 						/>
 
-						{#if !reference}
-							<p class="text-sm font-semibold text-gray-900">รูปต้นแบบสำหรับ trace</p>
-							<p class="mt-1 text-xs text-gray-500">
-								เลือกรูปมาวางใต้เส้นวาด ปรับความจางแล้ววาดทับได้ ทุกคนในห้องเห็นและจัดรูปได้พร้อมกัน
-								(รูปไม่ถูกนับรวมในไฟล์ที่บันทึก)
+						<div class="flex items-center justify-between gap-2">
+							<p class="text-sm font-semibold text-gray-900">เลเยอร์</p>
+							<div class="flex items-center gap-2">
+								<p class="text-[11px] text-gray-400">ของฉัน {myLayers.length} · ทั้งหมดที่เห็น {layers.length}</p>
+								{#if layers.length > 0}
+									<button
+										type="button"
+										onclick={toggleAllHidden}
+										title={anyVisible ? 'ซ่อนรูปทั้งหมด' : 'แสดงรูปทั้งหมด'}
+										aria-label={anyVisible ? 'ซ่อนรูปทั้งหมด' : 'แสดงรูปทั้งหมด'}
+										class="flex h-7 shrink-0 cursor-pointer items-center gap-1 rounded-md border border-gray-200 px-2 text-[11px] font-medium text-gray-600 transition-all hover:bg-gray-100 active:scale-95"
+									>
+										{anyVisible ? '🙈 ซ่อนทั้งหมด' : '👁 แสดงทั้งหมด'}
+									</button>
+								{/if}
+							</div>
+						</div>
+
+						<!-- Add images: they start private (only the uploader sees them) -->
+						<div class="mt-3 rounded-xl border border-primary-100 bg-primary-50/50 p-2">
+							<p class="text-[11px] leading-snug text-gray-500">
+								🌐 รูปที่เพิ่มจะ<b>ทุกคนเห็น</b>ทันที กดตั้งเป็นส่วนตัวได้ถ้าอยากใช้ trace คนเดียว
 							</p>
 							<button
 								type="button"
 								onclick={() => fileInput?.click()}
 								disabled={uploading}
-								class="mt-3 w-full rounded-xl bg-primary-500 py-2 text-sm font-semibold text-white transition-all hover:bg-primary-400 active:scale-95 disabled:cursor-not-allowed disabled:bg-btn-primary-disabled"
+								class="mt-2 w-full rounded-lg bg-primary-500 py-1.5 text-xs font-semibold text-white transition-all hover:bg-primary-400 active:scale-95 disabled:cursor-not-allowed disabled:bg-btn-primary-disabled"
 							>
-								{uploading ? 'กำลังอัปโหลด...' : '＋ เลือกรูป'}
+								{uploading ? 'กำลังอัปโหลด...' : '＋ เพิ่มรูป (เลือกได้หลายไฟล์)'}
 							</button>
-						{:else}
-							<div class="flex items-center justify-between gap-2">
-								<p class="text-sm font-semibold text-gray-900">รูปต้นแบบ</p>
-								{#if reference.locked}
-									<span class="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700">
-										🔒 โหมด Trace
-									</span>
-								{/if}
+						</div>
+
+						<!-- Select all / bulk public-private, for the images this player owns -->
+						{#if myLayers.length > 0}
+							<div class="mt-3 rounded-xl border border-gray-100 bg-gray-50 p-2">
+								<label class="flex cursor-pointer items-center gap-2 text-xs font-medium text-gray-700">
+									<input
+										type="checkbox"
+										checked={allMineChecked}
+										onchange={toggleAllMine}
+										class="h-4 w-4 cursor-pointer accent-primary-500"
+									/>
+									เลือกทั้งหมด
+									<span class="font-normal text-gray-400">({checkedMine.length}/{myLayers.length})</span>
+								</label>
+								<div class="mt-2 grid grid-cols-2 gap-2">
+									<button
+										type="button"
+										onclick={() => setVisibility(checkedMine.map((l) => l.id), true)}
+										disabled={checkedMine.length === 0}
+										class="rounded-lg border border-primary-300 bg-white px-2 py-1.5 text-xs font-medium text-primary-600 transition-all hover:bg-primary-50 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white"
+									>
+										🌐 เปิดสาธารณะ
+									</button>
+									<button
+										type="button"
+										onclick={() => setVisibility(checkedMine.map((l) => l.id), false)}
+										disabled={checkedMine.length === 0}
+										class="rounded-lg border border-gray-300 bg-white px-2 py-1.5 text-xs font-medium text-gray-700 transition-all hover:bg-gray-100 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white"
+									>
+										🙈 ตั้งเป็นส่วนตัว
+									</button>
+								</div>
 							</div>
+						{/if}
 
-							<label class="mt-3 block">
-								<span class="flex items-center justify-between text-xs text-gray-500">
-									ความทึบของรูป
-									<span class="font-medium text-gray-700">
-										{Math.round((opacityDraft ?? reference.opacity) * 100)}%
+						<!-- Layer stack, top first (like Photoshop) -->
+						<ul class="mt-3 flex flex-col gap-1" aria-label="รายการเลเยอร์">
+							<li class="flex items-center gap-2 rounded-lg bg-gray-50 px-2 py-1.5 text-xs text-gray-500">
+								<span class="w-6 text-center">✏️</span>
+								<span class="flex-1">เส้นวาด <span class="text-gray-400">· อยู่บนสุดเสมอ</span></span>
+							</li>
+							{#each pendingUploads as pend (pend.key)}
+								<li class="flex items-center gap-2 rounded-lg border border-dashed border-primary-200 bg-primary-50/40 px-2 py-1" aria-busy="true">
+									<span class="relative h-8 w-8 shrink-0 overflow-hidden rounded border border-gray-200 bg-white">
+										<img src={pend.preview} alt="" draggable="false" class="h-full w-full object-cover opacity-50" />
+										<span class="absolute inset-0 flex items-center justify-center bg-white/40">
+											<span class="h-4 w-4 animate-spin rounded-full border-2 border-primary-200 border-t-primary-500"></span>
+										</span>
 									</span>
-								</span>
-								<input
-									type="range"
-									min="5"
-									max="100"
-									step="1"
-									value={Math.round((opacityDraft ?? reference.opacity) * 100)}
-									oninput={(e) => {
-										opacityDraft = Number(e.currentTarget.value) / 100;
-										sendOpacity(opacityDraft);
-									}}
-									onchange={commitOpacity}
-									class="mt-1 w-full cursor-pointer accent-primary-500"
-								/>
-							</label>
-
-							<div class="mt-3 grid grid-cols-2 gap-2">
-								<button
-									type="button"
-									onclick={() => (refEditing = !refEditing)}
-									disabled={reference.locked || !reference.visible || refBusyByOther}
-									title={reference.locked ? 'ปลดล็อกก่อนถึงจะจัดตำแหน่งได้' : ''}
-									class="rounded-xl border px-2 py-2 text-xs font-medium transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 {refEditing
-										? 'border-primary-500 bg-primary-500 text-white hover:bg-primary-400'
-										: 'border-gray-200 text-gray-700 hover:border-gray-300 hover:bg-gray-100'}"
+									<span class="min-w-0 flex-1">
+										<span class="block truncate text-xs font-medium text-gray-700">{pend.name}</span>
+										<span class="block text-[10px] text-primary-500">กำลังอัปโหลด...</span>
+									</span>
+								</li>
+							{/each}
+							{#each layerList as layer (layer.id)}
+								{@const mine = canSetVisibility(layer)}
+								{@const hidden = hiddenIds.includes(layer.id)}
+								<li
+									class="flex items-center gap-1 rounded-lg border px-1 py-1 transition-colors {selectedRefId === layer.id
+										? 'border-primary-300 bg-primary-100/50'
+										: 'border-transparent hover:bg-gray-50'}"
 								>
-									{refEditing ? '✓ เสร็จ (กลับไปวาด)' : '✥ จัดตำแหน่ง'}
-								</button>
+									<button
+										type="button"
+										onclick={() => toggleHidden(layer.id)}
+										title={hidden ? 'แสดงรูปนี้' : 'ซ่อนรูปนี้ (เฉพาะหน้าจอคุณ)'}
+										aria-label={hidden ? 'แสดงรูปนี้' : 'ซ่อนรูปนี้'}
+										aria-pressed={!hidden}
+										class="flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-md transition-all hover:bg-gray-200 active:scale-90 {hidden
+											? 'text-gray-300'
+											: 'text-gray-700'}"
+									>
+										<svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+											<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" />
+											<circle cx="12" cy="12" r="3" />
+											{#if hidden}<path d="M4 4l16 16" />{/if}
+										</svg>
+									</button>
+									{#if mine}
+										<input
+											type="checkbox"
+											checked={checkedIds.includes(layer.id)}
+											onchange={() => toggleChecked(layer.id)}
+											aria-label="เลือกเลเยอร์ {layer.name}"
+											class="ml-1 h-4 w-4 shrink-0 cursor-pointer accent-primary-500"
+										/>
+									{:else}
+										<span class="ml-1 h-4 w-4 shrink-0" aria-hidden="true"></span>
+									{/if}
+									<button
+										type="button"
+										onclick={() => (selectedRefId = layer.id)}
+										class="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1 py-0.5 text-left"
+									>
+										<img
+											src={layer.url}
+											alt=""
+											draggable="false"
+											class="h-8 w-8 shrink-0 rounded border border-gray-200 bg-white object-cover {hidden ? 'opacity-40' : ''}"
+										/>
+										<span class="min-w-0 flex-1">
+											<span class="block truncate text-xs font-medium text-gray-800">{layer.name}</span>
+											<span class="block truncate text-[10px] text-gray-400">
+												{layer.isPublic ? '🌐 สาธารณะ' : '🙈 เห็นคนเดียว'} · {layer.ownerId === selfId
+													? 'ของคุณ'
+													: layer.ownerName
+														? `โดย ${layer.ownerName}`
+														: 'ไม่ทราบเจ้าของ'}{layer.locked ? ' · 🔒' : ''}
+												{#if refControllers[layer.id] && refControllers[layer.id].playerId !== selfId}
+													· {refControllers[layer.id].name} กำลังจัด
+												{/if}
+											</span>
+										</span>
+									</button>
+									{#if mine}
+										<button
+											type="button"
+											onclick={() => setVisibility([layer.id], !layer.isPublic)}
+											title={layer.isPublic
+												? 'ตอนนี้ทุกคนเห็น — กดเพื่อให้เห็นแค่คุณ'
+												: 'ตอนนี้เห็นแค่คุณ — กดเพื่อเปิดให้ทุกคนเห็น'}
+											aria-label={layer.isPublic ? 'ตั้งเป็นส่วนตัว' : 'เปิดสาธารณะ'}
+											class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-sm transition-all hover:bg-gray-200 active:scale-90"
+										>
+											{layer.isPublic ? '🌐' : '🙈'}
+										</button>
+									{/if}
+									<span class="flex shrink-0 flex-col">
+										<button
+											type="button"
+											onclick={() => moveLayer(layer, 'up')}
+											disabled={!canMove(layer, 'up')}
+											aria-label="เลื่อนเลเยอร์ขึ้น"
+											class="h-4 w-6 rounded text-[10px] leading-none text-gray-500 transition-all hover:bg-gray-200 active:scale-90 disabled:cursor-not-allowed disabled:opacity-25 disabled:hover:bg-transparent"
+										>
+											▲
+										</button>
+										<button
+											type="button"
+											onclick={() => moveLayer(layer, 'down')}
+											disabled={!canMove(layer, 'down')}
+											aria-label="เลื่อนเลเยอร์ลง"
+											class="h-4 w-6 rounded text-[10px] leading-none text-gray-500 transition-all hover:bg-gray-200 active:scale-90 disabled:cursor-not-allowed disabled:opacity-25 disabled:hover:bg-transparent"
+										>
+											▼
+										</button>
+									</span>
+								</li>
+							{/each}
+						</ul>
+						{#if layers.length === 0}
+							<p class="mt-2 rounded-lg bg-gray-50 px-3 py-3 text-center text-[11px] leading-snug text-gray-400">
+								ยังไม่มีรูปต้นแบบ เพิ่มรูปแล้ววาดทับเพื่อ trace ได้
+							</p>
+						{:else}
+							<p class="mt-1.5 text-[10px] text-gray-400">
+								คนอื่นไม่เห็นรูป "เห็นคนเดียว" ของคุณเลย · รูปสาธารณะทุกคนช่วยกันจัดได้
+							</p>
+						{/if}
+
+						<!-- Selected layer -->
+						{#if selected}
+							<div class="mt-3 border-t border-gray-100 pt-3">
+								<p class="truncate text-xs font-semibold text-gray-800">{selected.name}</p>
+
+								{#if canSetVisibility(selected)}
+									<div class="mt-2 grid grid-cols-2 gap-1 rounded-lg bg-gray-100 p-1" role="radiogroup" aria-label="ใครเห็นรูปนี้">
+										<button
+											type="button"
+											role="radio"
+											aria-checked={!selected.isPublic}
+											onclick={() => setVisibility([selected.id], false)}
+											class="rounded-md px-2 py-1 text-xs font-medium transition-all active:scale-95 {!selected.isPublic
+												? 'bg-white text-primary-600 shadow-sm'
+												: 'text-gray-500 hover:bg-white/60'}"
+										>
+											🙈 เห็นคนเดียว
+										</button>
+										<button
+											type="button"
+											role="radio"
+											aria-checked={selected.isPublic}
+											onclick={() => setVisibility([selected.id], true)}
+											class="rounded-md px-2 py-1 text-xs font-medium transition-all active:scale-95 {selected.isPublic
+												? 'bg-white text-primary-600 shadow-sm'
+												: 'text-gray-500 hover:bg-white/60'}"
+										>
+											🌐 สาธารณะ
+										</button>
+									</div>
+								{:else}
+									<p class="mt-1 text-[11px] text-gray-400">
+										อัปโหลดโดย {selected.ownerName || 'ผู้เล่นอื่น'} — เฉพาะเจ้าของเปลี่ยนการมองเห็นได้
+									</p>
+								{/if}
+
+								<label class="mt-2 block">
+									<span class="flex items-center justify-between text-xs text-gray-500">
+										ความทึบของรูป
+										<span class="font-medium text-gray-700">{Math.round(shownOpacity(selected) * 100)}%</span>
+									</span>
+									<input
+										type="range"
+										min="5"
+										max="100"
+										step="1"
+										value={Math.round(shownOpacity(selected) * 100)}
+										oninput={(e) => setOpacity(selected, Number(e.currentTarget.value) / 100)}
+										onchange={commitOpacity}
+										class="mt-1 w-full cursor-pointer accent-primary-500"
+									/>
+								</label>
+
+								<label class="mt-2 block">
+									<span class="flex items-center justify-between text-xs text-gray-500">
+										หมุนรูป
+										<span class="font-medium text-gray-700">{Math.round(shownRotation(selected))}°</span>
+									</span>
+									<input
+										type="range"
+										min="-180"
+										max="180"
+										step="1"
+										value={Math.round(shownRotation(selected))}
+										disabled={selected.locked || selectedBusy}
+										oninput={(e) => setRotation(selected, Number(e.currentTarget.value))}
+										onchange={commitRotation}
+										class="mt-1 w-full cursor-pointer accent-primary-500 disabled:cursor-not-allowed disabled:opacity-40"
+									/>
+								</label>
+								<div class="mt-1 grid grid-cols-3 gap-1">
+									<button
+										type="button"
+										onclick={() => rotateBy(selected, -90)}
+										disabled={selected.locked || selectedBusy}
+										class="rounded-lg border border-gray-200 py-1 text-[11px] font-medium text-gray-700 transition-all hover:border-gray-300 hover:bg-gray-100 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+									>
+										↺ −90°
+									</button>
+									<button
+										type="button"
+										onclick={() => rotateBy(selected, null)}
+										disabled={selected.locked || selectedBusy || selected.rotation === 0}
+										class="rounded-lg border border-gray-200 py-1 text-[11px] font-medium text-gray-700 transition-all hover:border-gray-300 hover:bg-gray-100 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+									>
+										รีเซ็ต 0°
+									</button>
+									<button
+										type="button"
+										onclick={() => rotateBy(selected, 90)}
+										disabled={selected.locked || selectedBusy}
+										class="rounded-lg border border-gray-200 py-1 text-[11px] font-medium text-gray-700 transition-all hover:border-gray-300 hover:bg-gray-100 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+									>
+										↻ +90°
+									</button>
+								</div>
+
 								<button
 									type="button"
-									onclick={() => DrawingService.refPatch(code, { locked: !reference.locked })}
-									class="rounded-xl border px-2 py-2 text-xs font-medium transition-all active:scale-95 {reference.locked
+									onclick={() => toggleLock(selected)}
+									class="mt-2 w-full rounded-xl border px-2 py-2 text-xs font-medium transition-all active:scale-95 {selected.locked
 										? 'border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100'
 										: 'border-gray-200 text-gray-700 hover:border-gray-300 hover:bg-gray-100'}"
 								>
-									{reference.locked ? '🔓 ปลดล็อก' : '🔒 ล็อก (Trace)'}
+									{selected.locked ? '🔓 ปลดล็อก' : '🔒 ล็อก (Trace)'}
 								</button>
 								<button
 									type="button"
-									onclick={() => DrawingService.refPatch(code, { visible: !reference.visible })}
-									class="rounded-xl border border-gray-200 px-2 py-2 text-xs font-medium text-gray-700 transition-all hover:border-gray-300 hover:bg-gray-100 active:scale-95"
+									onclick={() => (deleteTarget = selected)}
+									disabled={selected.locked || selectedBusy}
+									class="mt-2 w-full rounded-xl border border-red-200 py-2 text-xs font-medium text-red-500 transition-all hover:border-red-300 hover:bg-red-50 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
 								>
-									{reference.visible ? '🙈 ซ่อนรูป' : '👁 แสดงรูป'}
+									🗑 ลบเลเยอร์นี้
 								</button>
-								<button
-									type="button"
-									onclick={() => fileInput?.click()}
-									disabled={uploading || reference.locked || refBusyByOther}
-									class="rounded-xl border border-gray-200 px-2 py-2 text-xs font-medium text-gray-700 transition-all hover:border-gray-300 hover:bg-gray-100 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
-								>
-									{uploading ? 'กำลังอัปโหลด...' : '🔄 เปลี่ยนรูป'}
-								</button>
+
+								<p class="mt-2 text-[11px] leading-snug text-gray-400">
+									{#if selected.locked}
+										ล็อกอยู่: วาดทับได้ แต่ขยับ/ย่อขยาย/หมุน/ลบไม่ได้ (ปรับความทึบได้)
+									{:else if selectedBusy}
+										{refControllers[selected.id]?.name ?? 'เพื่อน'} กำลังจัดรูปนี้อยู่ รอสักครู่
+									{:else}
+										ลากรูปบนกระดาษได้เลย ลากมุมเพื่อย่อขยาย ลากปุ่ม ↻ เพื่อหมุน แล้วกด "ล็อก" เพื่อเริ่ม trace (รูปที่ยังไม่ล็อกจะบังการวาด)
+									{/if}
+								</p>
 							</div>
-
-							<button
-								type="button"
-								onclick={() => (showRefDeleteConfirm = true)}
-								disabled={reference.locked || refBusyByOther}
-								class="mt-2 w-full rounded-xl border border-red-200 py-2 text-xs font-medium text-red-500 transition-all hover:border-red-300 hover:bg-red-50 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
-							>
-								🗑 ลบรูปต้นแบบ
-							</button>
-
-							<p class="mt-2 text-[11px] leading-snug text-gray-400">
-								{#if reference.locked}
-									ล็อกอยู่: ทุกคนวาดทับได้ แต่ขยับ/ย่อขยาย/ลบรูปไม่ได้ (ปรับความทึบและซ่อนได้)
-								{:else if refBusyByOther}
-									{refController?.name ?? 'เพื่อน'} กำลังจัดรูปอยู่ รอสักครู่
-								{:else}
-									กด "จัดตำแหน่ง" แล้วลากรูป/ลากมุมเพื่อย่อขยาย จากนั้นกด "ล็อก" เพื่อเริ่ม trace
-								{/if}
+						{:else if layers.length > 0}
+							<p class="mt-3 border-t border-gray-100 pt-3 text-center text-[11px] text-gray-400">
+								เลือกเลเยอร์เพื่อปรับความทึบ หมุน หรือล็อก
 							</p>
 						{/if}
 					</div>

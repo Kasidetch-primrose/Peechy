@@ -79,19 +79,32 @@ export async function getAllPlayers(code: string): Promise<DrawPlayer[]> {
 
 // The trace image lives in the room hash so it survives a server restart
 // (like the room itself), unlike strokes which are memory-only.
-export async function getReference(code: string): Promise<DrawReference | null> {
-	const raw = await redis.hget(roomKey(code), 'reference');
-	if (!raw) return null;
+export async function getReferences(code: string): Promise<DrawReference[]> {
+	const [list, legacy] = await redis.hmget(roomKey(code), 'references', 'reference');
 	try {
-		return JSON.parse(raw) as DrawReference;
+		// Layers saved before rotation/ownership existed: upright, and public with no
+		// owner (they were visible to everyone back then).
+		const normalize = (r: Partial<DrawReference>): DrawReference => ({
+			...(r as DrawReference),
+			name: r.name ?? 'รูปต้นแบบ',
+			rotation: r.rotation ?? 0,
+			ownerId: r.ownerId ?? '',
+			ownerName: r.ownerName ?? '',
+			isPublic: r.isPublic ?? true
+		});
+		if (list) return (JSON.parse(list) as Partial<DrawReference>[]).map(normalize);
+		// Rooms saved before layers existed held a single image in `reference`.
+		if (legacy) return [normalize(JSON.parse(legacy) as Partial<DrawReference>)];
 	} catch {
-		return null;
+		// corrupt entry: treat as empty rather than breaking the room
 	}
+	return [];
 }
 
-export async function setReference(code: string, reference: DrawReference | null): Promise<void> {
-	if (reference) await redis.hset(roomKey(code), 'reference', JSON.stringify(reference));
-	else await redis.hdel(roomKey(code), 'reference');
+export async function setReferences(code: string, references: DrawReference[]): Promise<void> {
+	if (references.length > 0) await redis.hset(roomKey(code), 'references', JSON.stringify(references));
+	else await redis.hdel(roomKey(code), 'references');
+	await redis.hdel(roomKey(code), 'reference'); // drop the legacy single-image field
 	await touch(code);
 }
 

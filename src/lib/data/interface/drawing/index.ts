@@ -50,28 +50,37 @@ export interface IStroke {
 
 export type DrawTool = 'pen' | 'eraser' | 'bucket';
 
-// The shared trace image under the drawing. x/y (top-left) and width are
+// A trace-image layer under the drawing. x/y (top-left) and width are
 // fractions (0..1) of the paper's width/height, so it sits in the same place
 // on every screen; height follows from `aspect` (natural width / height).
 export interface IDrawReference {
 	id: string;
 	url: string;
+	name: string;
 	x: number;
 	y: number;
 	width: number;
 	aspect: number;
+	// Degrees, clockwise, in (-180, 180], about the image's centre. x/y/width
+	// describe the UNrotated box; rotation is applied on top of it.
+	rotation: number;
 	opacity: number;
-	locked: boolean; // static / trace mode — nobody can move, resize or replace it
-	visible: boolean;
+	locked: boolean; // static / trace mode — can't be moved, resized, rotated or deleted
+	// The uploader. Only they can change `isPublic`. '' = an old image with no owner.
+	ownerId: string;
+	ownerName: string;
+	// false (the default for a new upload): the server only ever sends it to its owner.
+	// true: everyone in the room sees it and can adjust it.
+	isPublic: boolean;
 }
 
-// Who is currently moving/resizing the reference (only one person at a time).
+// Who is currently moving/resizing a layer (one person per layer at a time).
 export interface IRefController {
 	playerId: string;
 	name: string;
 }
 
-export type RefDeniedReason = 'locked' | 'busy' | 'invalid';
+export type RefDeniedReason = 'locked' | 'busy' | 'invalid' | 'limit';
 
 // A room-wide vote to clear the canvas. votes: playerId -> true (yes) /
 // null (hasn't answered). The starter is always true.

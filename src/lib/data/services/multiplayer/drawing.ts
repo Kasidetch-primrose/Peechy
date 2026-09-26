@@ -21,8 +21,8 @@ interface JoinAck {
 	room?: IDrawRoom;
 	players?: IDrawPlayer[];
 	strokes?: IStroke[];
-	reference?: IDrawReference | null;
-	referenceController?: IRefController | null;
+	references?: IDrawReference[];
+	referenceControllers?: Record<string, IRefController>;
 }
 
 export default class DrawingService {
@@ -58,31 +58,41 @@ export default class DrawingService {
 		MultiplayerService.getSocket().emit('draw:undo', { code });
 	}
 
-	static refAdd(code: string, url: string, aspect: number): void {
-		MultiplayerService.getSocket().emit('draw:ref:add', { code, url, aspect });
+	static refAdd(code: string, url: string, aspect: number, name: string): void {
+		MultiplayerService.getSocket().emit('draw:ref:add', { code, url, aspect, name });
 	}
 
 	static refPatch(
 		code: string,
-		patch: { opacity?: number; locked?: boolean; visible?: boolean }
+		id: string,
+		patch: { opacity?: number; locked?: boolean; rotation?: number }
 	): void {
-		MultiplayerService.getSocket().emit('draw:ref:patch', { code, patch });
+		MultiplayerService.getSocket().emit('draw:ref:patch', { code, id, patch });
 	}
 
-	static refGrab(code: string): void {
-		MultiplayerService.getSocket().emit('draw:ref:grab', { code });
+	// Owner-only: make several of your images public/private at once.
+	static refSetVisibility(code: string, ids: string[], isPublic: boolean): void {
+		MultiplayerService.getSocket().emit('draw:ref:visibility', { code, ids, isPublic });
 	}
 
-	static refMove(code: string, x: number, y: number, width: number): void {
-		MultiplayerService.getSocket().emit('draw:ref:move', { code, x, y, width });
+	static refReorder(code: string, id: string, direction: 'up' | 'down'): void {
+		MultiplayerService.getSocket().emit('draw:ref:reorder', { code, id, direction });
 	}
 
-	static refRelease(code: string): void {
-		MultiplayerService.getSocket().emit('draw:ref:release', { code });
+	static refGrab(code: string, id: string): void {
+		MultiplayerService.getSocket().emit('draw:ref:grab', { code, id });
 	}
 
-	static refDelete(code: string): void {
-		MultiplayerService.getSocket().emit('draw:ref:delete', { code });
+	static refMove(code: string, id: string, x: number, y: number, width: number, rotation: number): void {
+		MultiplayerService.getSocket().emit('draw:ref:move', { code, id, x, y, width, rotation });
+	}
+
+	static refRelease(code: string, id: string): void {
+		MultiplayerService.getSocket().emit('draw:ref:release', { code, id });
+	}
+
+	static refDelete(code: string, id: string): void {
+		MultiplayerService.getSocket().emit('draw:ref:delete', { code, id });
 	}
 
 	static requestClear(code: string): void {
