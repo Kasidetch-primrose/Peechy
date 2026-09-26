@@ -28,6 +28,7 @@
 	// The drawing is always above all the layers.
 	let showRefPanel = $state(false);
 	let showHelp = $state(false);
+	let confirmLeave = $state(false);
 	let refPanelWrap = $state<HTMLElement | null>(null);
 	let selectedRefId = $state<string | null>(null); // the layer being adjusted (opacity, rotation, position…)
 	let checkedIds = $state<string[]>([]); // tick boxes for the bulk public/private buttons
@@ -352,6 +353,10 @@
 	}
 
 	function handleKeydown(e: KeyboardEvent) {
+		if (e.key === 'Escape' && confirmLeave) {
+			confirmLeave = false;
+			return;
+		}
 		if (e.key === 'Escape' && showHelp) {
 			showHelp = false;
 			return;
@@ -461,6 +466,46 @@
 		role="status"
 	>
 		{toast}
+	</div>
+{/if}
+
+{#if confirmLeave}
+	<div
+		transition:fade={{ duration: motion(180) }}
+		class="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 backdrop-blur-sm"
+		role="dialog"
+		aria-modal="true"
+		tabindex="-1"
+		onpointerdown={(e) => {
+			if (e.target === e.currentTarget) confirmLeave = false;
+		}}
+	>
+		<div
+			transition:scale={{ start: 0.94, duration: motion(200) }}
+			class="mx-4 w-full max-w-[26rem] rounded-2xl bg-white p-6 shadow-xl"
+		>
+			<h3 class="text-base font-semibold text-gray-900">ออกจากห้องนี้?</h3>
+			<p class="mt-1 text-sm text-gray-500">คุณจะออกจากห้องและกลับไปหน้าแรก ถ้าอยากกลับมาต้องใช้รหัสห้องเดิมเพื่อเข้าใหม่</p>
+			<div class="mt-5 flex gap-3">
+				<button
+					type="button"
+					onclick={() => (confirmLeave = false)}
+					class="flex-1 cursor-pointer rounded-xl border border-gray-200 py-2 text-sm font-medium text-gray-700 transition-all hover:border-gray-300 hover:bg-gray-100 active:scale-95"
+				>
+					อยู่ต่อ
+				</button>
+				<button
+					type="button"
+					onclick={() => {
+						confirmLeave = false;
+						handleLeave();
+					}}
+					class="flex-1 cursor-pointer rounded-xl bg-red-500 py-2 text-sm font-semibold text-white transition-all hover:bg-red-400 hover:shadow-md active:scale-95"
+				>
+					ออกจากห้อง
+				</button>
+			</div>
+		</div>
 	</div>
 {/if}
 
@@ -828,7 +873,7 @@
 				</button>
 				<button
 					type="button"
-					onclick={handleLeave}
+					onclick={() => (confirmLeave = true)}
 					class="rounded-full border border-red-200 px-3 py-1 text-xs font-medium text-red-500 transition-all hover:border-red-300 hover:bg-red-50 active:scale-95"
 				>
 					ออกจากห้อง
