@@ -5,6 +5,7 @@ import type {
 	IDrawReference,
 	IDrawRoom,
 	IPoint,
+	IPublishMeta,
 	IRefController,
 	IStroke
 } from '$lib/data/interface/drawing';
@@ -101,6 +102,22 @@ export default class DrawingService {
 
 	static respondClear(code: string, approve: boolean): void {
 		MultiplayerService.getSocket().emit('draw:clear:respond', { code, approve });
+	}
+
+	static requestPublish(code: string, meta: IPublishMeta): void {
+		MultiplayerService.getSocket().emit('draw:publish:request', { code, meta });
+	}
+
+	static respondPublish(code: string, approve: boolean): void {
+		MultiplayerService.getSocket().emit('draw:publish:respond', { code, approve });
+	}
+
+	static cancelPublish(code: string): void {
+		MultiplayerService.getSocket().emit('draw:publish:cancel', { code });
+	}
+
+	static publishDone(code: string, artworkId: string, title: string): void {
+		MultiplayerService.getSocket().emit('draw:publish:done', { code, artworkId, title });
 	}
 
 	static cancelClear(code: string): void {

@@ -100,3 +100,28 @@ export interface IClearNotice {
 	byName?: string;
 	seconds?: number;
 }
+
+// Publishing to the gallery is a room vote like clearing (server: draw.ts).
+export interface IPublishVote {
+	initiatorId: string;
+	initiatorName: string;
+	title: string;
+	expiresAt: number;
+	votes: Record<string, boolean | null>;
+}
+
+export interface IPublishMeta {
+	title: string;
+	description: string;
+	creatorName: string;
+}
+
+// A short message about the last publish attempt. 'published' carries the new artwork.
+export interface IPublishNotice {
+	id: number;
+	status: 'approved' | 'rejected' | 'expired' | 'cancelled' | 'busy' | 'cooldown' | 'invalid' | 'published' | 'failed';
+	byName?: string;
+	seconds?: number;
+	artworkId?: string;
+	title?: string;
+}

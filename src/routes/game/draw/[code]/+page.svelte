@@ -7,11 +7,13 @@
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
 	import { authUserStore } from '$lib/data/stores/authUser';
+	import AuthService from '$lib/data/services/auth';
 	import { connect, drawingStore, joinRoom, leaveRoom } from '$lib/data/stores/drawing';
 	import DrawingService from '$lib/data/services/multiplayer/drawing';
 	import DrawCanvas from '$lib/components/DrawCanvas.svelte';
 	import GuestNameModal from '$lib/components/GuestNameModal.svelte';
 	import ClearVotePrompt from '$lib/components/ClearVotePrompt.svelte';
+	import PublishPrompt from '$lib/components/PublishPrompt.svelte';
 	import { getGuestId, saveGuestName } from '$lib/utils/guest-identity';
 	import type { DrawTool, IDrawReference } from '$lib/data/interface/drawing';
 
@@ -353,6 +355,10 @@
 	}
 
 	function handleKeydown(e: KeyboardEvent) {
+		if (e.key === 'Escape' && showPublish) {
+			closePublish();
+			return;
+		}
 		if (e.key === 'Escape' && confirmLeave) {
 			confirmLeave = false;
 			return;
@@ -399,6 +405,124 @@
 
 	let canvasRef = $state<DrawCanvas>();
 	let saving = $state(false);
+
+	// ── Publish to the gallery ──
+	// The dialog collects title/description/visibility, then asks the room to vote (server).
+	// When everyone agrees the server hands THIS player a one-time ticket; we then upload the
+	// PNG with it and the web app stores the artwork using the server's frozen snapshot.
+	let showPublish = $state(false);
+	let pubTitle = $state('');
+	let pubDesc = $state('');
+	let pubCreator = $state('');
+	let pubPreview = $state('');
+	let pubBusy = $state(false); // preparing the preview / uploading after approval
+
+	function closePublish() {
+		showPublish = false;
+		if (pubPreview) URL.revokeObjectURL(pubPreview);
+		pubPreview = '';
+	}
+
+	async function openPublish() {
+		if (pubBusy || $drawingStore.publishVote) return;
+		pubBusy = true;
+		try {
+			const blob = await canvasRef?.exportPng();
+			if (!blob) {
+				showToast('เตรียมภาพไม่สำเร็จ');
+				return;
+			}
+			pubPreview = URL.createObjectURL(blob);
+			const me = $drawingStore.players.find((p) => p.id === selfId);
+			pubCreator = pubCreator || $authUserStore.user?.username || me?.name || '';
+			showPublish = true;
+		} finally {
+			pubBusy = false;
+		}
+	}
+
+	function submitPublish() {
+		const title = pubTitle.trim();
+		if (!title) return;
+		DrawingService.requestPublish(code, {
+			title,
+			description: pubDesc.trim(),
+			creatorName: pubCreator.trim()
+		});
+		closePublish();
+	}
+
+	// Small WebP for the gallery grid, made from the full PNG.
+	async function makeThumbnail(png: Blob): Promise<Blob | null> {
+		try {
+			const bmp = await createImageBitmap(png);
+			const w = Math.min(480, bmp.width);
+			const c = document.createElement('canvas');
+			c.width = w;
+			c.height = Math.max(1, Math.round((bmp.height * w) / bmp.width));
+			c.getContext('2d')?.drawImage(bmp, 0, 0, c.width, c.height);
+			bmp.close();
+			return await new Promise((resolve) => c.toBlob((b) => resolve(b), 'image/webp', 0.85));
+		} catch {
+			return null;
+		}
+	}
+
+	// Everyone agreed → redeem the ticket (only the requester receives one).
+	$effect(() => {
+		const ticket = $drawingStore.publishTicket;
+		if (!ticket) return;
+		drawingStore.update((s) => ({ ...s, publishTicket: null }));
+		void uploadArtwork(ticket);
+	});
+
+	async function uploadArtwork(ticket: string) {
+		pubBusy = true;
+		try {
+			const png = await canvasRef?.exportPng();
+			if (!png) throw new Error('no image');
+			const form = new FormData();
+			form.append('ticket', ticket);
+			form.append('image', new File([png], 'artwork.png', { type: 'image/png' }));
+			const thumb = await makeThumbnail(png);
+			if (thumb) form.append('thumbnail', new File([thumb], 'thumbnail.webp', { type: 'image/webp' }));
+
+			const send = (token: string) =>
+				fetch('/api/artworks', {
+					method: 'POST',
+					headers: token ? { Authorization: `Bearer ${token}` } : {},
+					body: form
+				});
+			let auth = get(authUserStore);
+			let res = await send(auth.accessToken);
+			if (res.status === 401 && auth.refreshToken) {
+				// Access tokens last 24h; renew with the refresh token and retry once.
+				const renewed = await AuthService.refresh(auth.refreshToken).catch(() => null);
+				if (renewed?.accessToken) {
+					authUserStore.update((s) => ({
+						...s,
+						accessToken: renewed.accessToken,
+						refreshToken: renewed.refreshToken ?? s.refreshToken
+					}));
+					res = await send(renewed.accessToken);
+				} else {
+					res = await send(''); // session is gone: publish as a guest rather than lose the drawing
+				}
+			}
+			const data = await res.json();
+			if (!res.ok || data.status !== 'success') throw new Error(data.error ?? 'publish failed');
+			DrawingService.publishDone(code, data.id, data.title);
+			pubTitle = '';
+			pubDesc = '';
+		} catch {
+			drawingStore.update((s) => ({
+				...s,
+				publishNotice: { id: Date.now(), status: 'failed' }
+			}));
+		} finally {
+			pubBusy = false;
+		}
+	}
 
 	async function handleSave() {
 		if (saving) return;
@@ -456,6 +580,7 @@
 
 {#if $drawingStore.room}
 	<ClearVotePrompt {code} {selfId} />
+	<PublishPrompt {code} {selfId} />
 {/if}
 
 {#if toast}
@@ -466,6 +591,86 @@
 		role="status"
 	>
 		{toast}
+	</div>
+{/if}
+
+{#if showPublish}
+	<div
+		transition:fade={{ duration: motion(180) }}
+		class="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
+		role="dialog"
+		aria-modal="true"
+		aria-label="เผยแพร่ผลงาน"
+		tabindex="-1"
+		onpointerdown={(e) => {
+			if (e.target === e.currentTarget) closePublish();
+		}}
+	>
+		<form
+			transition:scale={{ start: 0.94, duration: motion(200) }}
+			class="flex max-h-[90vh] w-full max-w-[30rem] flex-col rounded-2xl bg-white shadow-xl"
+			onsubmit={(e) => {
+				e.preventDefault();
+				submitPublish();
+			}}
+		>
+			<div class="border-b border-gray-100 px-6 py-4">
+				<h3 class="text-base font-semibold text-gray-900">🚀 เผยแพร่ผลงาน</h3>
+				<p class="mt-0.5 text-xs text-gray-500">ทุกคนในห้องต้องกด “เห็นด้วย” ก่อน ผลงานจึงจะขึ้นแกลเลอรีให้ทุกคนเห็น</p>
+			</div>
+			<div class="space-y-4 overflow-y-auto px-6 py-4">
+				{#if pubPreview}
+					<img src={pubPreview} alt="ตัวอย่างผลงาน" class="w-full rounded-xl border border-gray-200 bg-white object-contain" style="max-height: 14rem;" />
+				{/if}
+				<label class="block">
+					<span class="text-xs font-medium text-gray-700">ชื่อผลงาน *</span>
+					<input
+						type="text"
+						bind:value={pubTitle}
+						maxlength="100"
+						required
+						placeholder="เช่น แมวน้อยของเรา"
+						class="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-800 outline-none focus:border-primary-400"
+					/>
+				</label>
+				<label class="block">
+					<span class="text-xs font-medium text-gray-700">คำอธิบาย</span>
+					<textarea
+						bind:value={pubDesc}
+						maxlength="500"
+						rows="2"
+						placeholder="เล่าเรื่องผลงานนี้สั้นๆ (ไม่บังคับ)"
+						class="mt-1 w-full resize-none rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-800 outline-none focus:border-primary-400"
+					></textarea>
+				</label>
+				<label class="block">
+					<span class="text-xs font-medium text-gray-700">ชื่อผู้สร้างที่จะแสดง</span>
+					<input
+						type="text"
+						bind:value={pubCreator}
+						maxlength="40"
+						class="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-800 outline-none focus:border-primary-400"
+					/>
+				</label>
+				<p class="text-[11px] leading-snug text-gray-400">รูปที่อัปโหลดไว้ลอกลายจะไม่ถูกรวมไปกับผลงาน</p>
+			</div>
+			<div class="flex gap-3 border-t border-gray-100 px-6 py-3">
+				<button
+					type="button"
+					onclick={closePublish}
+					class="flex-1 cursor-pointer rounded-xl border border-gray-200 py-2 text-sm font-medium text-gray-700 transition-all hover:border-gray-300 hover:bg-gray-100 active:scale-95"
+				>
+					ยกเลิก
+				</button>
+				<button
+					type="submit"
+					disabled={!pubTitle.trim()}
+					class="flex-1 cursor-pointer rounded-xl bg-primary-500 py-2 text-sm font-semibold text-white transition-all hover:bg-primary-400 hover:shadow-md active:scale-95 disabled:cursor-not-allowed disabled:bg-btn-primary-disabled"
+				>
+					ขอเผยแพร่
+				</button>
+			</div>
+		</form>
 	</div>
 {/if}
 
@@ -602,7 +807,8 @@
 						</li>
 						<li class="flex gap-2">
 							<span class="text-primary-400">•</span><span
-								>ออกจากห้อง — ออกจากห้องนี้แล้วกลับหน้าแรก</span
+								>เผยแพร่ — ส่งผลงานขึ้นแกลเลอรี ต้องให้ทุกคนในห้องกด “เห็นด้วย” (ตั้งชื่อและคำอธิบายก่อนกดขอ) รูปลอกลายไม่ติดไปกับผลงาน และเผยแพร่หลายครั้งได้ในห้องเดิม</span></li>
+					<li class="flex gap-2"><span class="text-primary-400">•</span><span>ออกจากห้อง — ออกจากห้องนี้แล้วกลับหน้าแรก</span
 							>
 						</li>
 					</ul>
@@ -870,6 +1076,15 @@
 					class="rounded-full border border-gray-200 px-3 py-1 text-xs font-medium text-gray-600 transition-all hover:border-gray-300 hover:bg-gray-100 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-gray-200 disabled:hover:bg-transparent"
 				>
 					💾 บันทึกรูป
+				</button>
+				<button
+					type="button"
+					onclick={openPublish}
+					disabled={pubBusy || !!$drawingStore.publishVote}
+					title="เผยแพร่ผลงานขึ้นแกลเลอรี (ต้องให้ทุกคนในห้องเห็นด้วย)"
+					class="rounded-full border border-primary-300 bg-primary-100/50 px-3 py-1 text-xs font-medium text-primary-600 transition-all hover:bg-primary-100 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
+				>
+					{pubBusy ? 'กำลังเตรียม...' : '🚀 เผยแพร่'}
 				</button>
 				<button
 					type="button"

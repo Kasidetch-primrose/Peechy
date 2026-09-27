@@ -11,7 +11,31 @@ const CORS_ORIGIN = (process.env.CORS_ORIGIN ?? 'http://localhost:5173')
 	.split(',')
 	.map((origin) => origin.trim());
 
-const httpServer = createServer();
+// Private endpoint for the web app: redeem a publish ticket (one time) and get
+// the frozen snapshot of the room. Guarded by a shared secret; everything else
+// is Socket.IO's.
+const INTERNAL_SECRET = process.env.INTERNAL_SECRET ?? '';
+const httpServer = createServer((req, res) => {
+	const match = /^\/internal\/publish-ticket\/([0-9a-f]{48})$/.exec(req.url ?? '');
+	if (!match || req.method !== 'GET') {
+		res.statusCode = 404;
+		res.end();
+		return;
+	}
+	if (!INTERNAL_SECRET || req.headers['x-internal-secret'] !== INTERNAL_SECRET) {
+		res.statusCode = 403;
+		res.end();
+		return;
+	}
+	const snapshot = draw.redeemPublishTicket(match[1]);
+	res.setHeader('Content-Type', 'application/json');
+	if (!snapshot) {
+		res.statusCode = 404;
+		res.end(JSON.stringify({ error: 'ticket not found or expired' }));
+		return;
+	}
+	res.end(JSON.stringify(snapshot));
+});
 const io = new Server(httpServer, {
 	cors: { origin: CORS_ORIGIN }
 });
@@ -274,6 +298,31 @@ io.on('connection', (socket) => {
 		if (!inDrawRoom(code)) return;
 		draw.cancelClear(io, code, playerId);
 	});
+
+	// Publishing to the gallery is a room vote too (see draw.ts).
+	socket.on('draw:publish:request', async ({ code, meta }: { code: string; meta: unknown }) => {
+		if (!inDrawRoom(code)) return;
+		await draw.requestPublish(io, code, playerId, meta);
+	});
+
+	socket.on('draw:publish:respond', async ({ code, approve }: { code: string; approve: boolean }) => {
+		if (!inDrawRoom(code)) return;
+		await draw.respondPublish(io, code, playerId, approve === true);
+	});
+
+	socket.on('draw:publish:cancel', async ({ code }: { code: string }) => {
+		if (!inDrawRoom(code)) return;
+		await draw.cancelPublish(io, code, playerId);
+	});
+
+	// The requester reports the finished artwork so everyone gets the link.
+	socket.on(
+		'draw:publish:done',
+		({ code, artworkId, title }: { code: string; artworkId: unknown; title: unknown }) => {
+			if (!inDrawRoom(code)) return;
+			draw.announcePublished(io, code, playerId, artworkId, title);
+		}
+	);
 
 	socket.on('draw:undo', ({ code }: { code: string }) => {
 		if (!inDrawRoom(code)) return;

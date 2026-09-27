@@ -218,6 +218,7 @@ export function cancelClear(io: Server, code: string, playerId: string): void {
 // A voter left or dropped: their answer no longer counts. If they started
 // the vote, it's cancelled; otherwise the rest may now be unanimous.
 function dropVoter(io: Server, code: string, playerId: string): void {
+	dropPublishVoter(io, code, playerId);
 	const vote = clearVotes.get(code);
 	if (!vote || !vote.votes.has(playerId)) return;
 	if (vote.initiatorId === playerId) {
@@ -227,6 +228,207 @@ function dropVoter(io: Server, code: string, playerId: string): void {
 	vote.votes.delete(playerId);
 	if (allYes(vote)) finishClearVote(io, code, 'approved');
 	else emitVoteState(io, code, vote);
+}
+
+// ── Publish vote ──────────────────────────────────────────────────────────
+// Publishing turns the drawing into a permanent gallery artwork, so — like
+// clearing — it needs every online player to agree. The server never renders or
+// stores the artwork itself: on approval it freezes a snapshot of the room
+// (strokes + who was there) behind a one-time ticket that only the player who
+// asked can use. The web app redeems that ticket over a private HTTP call
+// (GET /internal/publish-ticket/:token), so the stored source data is the
+// server's copy, not something a browser can make up.
+
+const PUBLISH_VOTE_MS = 30_000;
+const PUBLISH_COOLDOWN_MS = 10_000;
+const PUBLISH_TICKET_MS = 5 * 60_000;
+
+export interface PublishMeta {
+	title: string;
+	description: string;
+	creatorName: string;
+}
+
+interface PublishVote {
+	initiatorId: string;
+	meta: PublishMeta;
+	names: Map<string, string>;
+	votes: Map<string, boolean | null>;
+	expiresAt: number;
+	timer: NodeJS.Timeout;
+}
+
+export interface PublishSnapshot {
+	roomCode: string;
+	ratio: DrawRatio;
+	strokes: Stroke[];
+	players: { id: string; name: string }[];
+	initiatorId: string;
+	meta: PublishMeta;
+}
+
+const publishVotes = new Map<string, PublishVote>();
+const publishCooldownUntil = new Map<string, number>();
+const publishTickets = new Map<string, { snapshot: PublishSnapshot; timer: NodeJS.Timeout }>();
+
+function cleanMeta(input: unknown): PublishMeta | null {
+	if (!input || typeof input !== 'object') return null;
+	const m = input as Record<string, unknown>;
+	const title = typeof m.title === 'string' ? m.title.trim().slice(0, 100) : '';
+	if (!title) return null;
+	const description = typeof m.description === 'string' ? m.description.trim().slice(0, 500) : '';
+	const creatorName = typeof m.creatorName === 'string' ? m.creatorName.trim().slice(0, 40) : '';
+	return { title, description, creatorName };
+}
+
+function emitPublishState(io: Server, code: string, vote: PublishVote): void {
+	io.to(`draw:${code}`).emit('draw:publish:vote', {
+		initiatorId: vote.initiatorId,
+		initiatorName: vote.names.get(vote.initiatorId) ?? '',
+		title: vote.meta.title,
+		expiresAt: vote.expiresAt,
+		votes: Object.fromEntries(vote.votes)
+	});
+}
+
+type PublishOutcome = 'approved' | 'rejected' | 'expired' | 'cancelled';
+
+async function finishPublishVote(
+	io: Server,
+	code: string,
+	status: PublishOutcome,
+	byName?: string
+): Promise<void> {
+	const vote = publishVotes.get(code);
+	if (!vote) return;
+	clearTimeout(vote.timer);
+	publishVotes.delete(code);
+	const cooldownUntil = Date.now() + PUBLISH_COOLDOWN_MS;
+	publishCooldownUntil.set(code, cooldownUntil);
+
+	if (status === 'approved') {
+		const room = await rooms.getRoom(code);
+		if (room) {
+			// Freeze the drawing now; later strokes don't change this artwork.
+			const ticket = randomBytes(24).toString('hex');
+			const snapshot: PublishSnapshot = {
+				roomCode: code,
+				ratio: room.ratio,
+				strokes: structuredClone(strokesFor(code)),
+				players: [...vote.names].map(([id, name]) => ({ id, name })),
+				initiatorId: vote.initiatorId,
+				meta: vote.meta
+			};
+			publishTickets.set(ticket, {
+				snapshot,
+				timer: setTimeout(() => publishTickets.delete(ticket), PUBLISH_TICKET_MS)
+			});
+			io.to(`player:${vote.initiatorId}`).emit('draw:publish:approved', { ticket });
+		}
+	}
+	io.to(`draw:${code}`).emit('draw:publish:result', {
+		status,
+		byName,
+		cooldownUntil,
+		initiatorId: vote.initiatorId
+	});
+}
+
+const publishAllYes = (vote: PublishVote) => [...vote.votes.values()].every((v) => v === true);
+
+export async function requestPublish(
+	io: Server,
+	code: string,
+	playerId: string,
+	metaInput: unknown
+): Promise<void> {
+	const deny = (reason: 'busy' | 'cooldown' | 'invalid', retryAt?: number): void => {
+		io.to(`player:${playerId}`).emit('draw:publish:denied', { reason, retryAt });
+	};
+	const meta = cleanMeta(metaInput);
+	if (!meta) return deny('invalid');
+	if (publishVotes.has(code)) return deny('busy');
+	const cooldownEnds = publishCooldownUntil.get(code) ?? 0;
+	if (Date.now() < cooldownEnds) return deny('cooldown', cooldownEnds);
+	if (strokesFor(code).length === 0) return deny('invalid'); // nothing drawn yet
+
+	const online = (await rooms.getAllPlayers(code)).filter((p) => p.connected || p.id === playerId);
+	if (!online.some((p) => p.id === playerId)) return;
+
+	const vote: PublishVote = {
+		initiatorId: playerId,
+		meta,
+		names: new Map(online.map((p) => [p.id, p.name])),
+		votes: new Map(online.map((p) => [p.id, p.id === playerId ? true : null])),
+		expiresAt: Date.now() + PUBLISH_VOTE_MS,
+		timer: setTimeout(() => void finishPublishVote(io, code, 'expired'), PUBLISH_VOTE_MS)
+	};
+	publishVotes.set(code, vote);
+	// Alone in the room: nobody to ask.
+	if (publishAllYes(vote)) {
+		await finishPublishVote(io, code, 'approved');
+		return;
+	}
+	emitPublishState(io, code, vote);
+}
+
+export async function respondPublish(
+	io: Server,
+	code: string,
+	playerId: string,
+	approve: boolean
+): Promise<void> {
+	const vote = publishVotes.get(code);
+	if (!vote || playerId === vote.initiatorId || vote.votes.get(playerId) !== null) return;
+	if (!approve) {
+		await finishPublishVote(io, code, 'rejected', vote.names.get(playerId));
+		return;
+	}
+	vote.votes.set(playerId, true);
+	if (publishAllYes(vote)) await finishPublishVote(io, code, 'approved');
+	else emitPublishState(io, code, vote);
+}
+
+export async function cancelPublish(io: Server, code: string, playerId: string): Promise<void> {
+	const vote = publishVotes.get(code);
+	if (vote && vote.initiatorId === playerId) await finishPublishVote(io, code, 'cancelled');
+}
+
+function dropPublishVoter(io: Server, code: string, playerId: string): void {
+	const vote = publishVotes.get(code);
+	if (!vote || !vote.votes.has(playerId)) return;
+	if (vote.initiatorId === playerId) {
+		void finishPublishVote(io, code, 'cancelled');
+		return;
+	}
+	vote.votes.delete(playerId);
+	if (publishAllYes(vote)) void finishPublishVote(io, code, 'approved');
+	else emitPublishState(io, code, vote);
+}
+
+/** One-time redemption of a publish ticket (used by the web app's API). */
+export function redeemPublishTicket(token: string): PublishSnapshot | null {
+	const entry = publishTickets.get(token);
+	if (!entry) return null;
+	clearTimeout(entry.timer);
+	publishTickets.delete(token);
+	return entry.snapshot;
+}
+
+/** Tell the room an artwork was published (called after the web app stored it). */
+export function announcePublished(
+	io: Server,
+	code: string,
+	playerId: string,
+	artworkId: unknown,
+	title: unknown
+): void {
+	if (typeof artworkId !== 'string' || !/^[0-9a-f-]{36}$/i.test(artworkId)) return;
+	io.to(`draw:${code}`).emit('draw:publish:published', {
+		artworkId,
+		title: typeof title === 'string' ? title.slice(0, 100) : '',
+		byId: playerId
+	});
 }
 
 export async function handleDisconnect(io: Server, code: string, playerId: string): Promise<void> {

@@ -17,6 +17,35 @@
 	const profileId = $derived(Number(page.params.id));
 	const isOwner = $derived($authUserStore.user?.id === profileId);
 
+	// Artworks this user created or helped draw (Draw Together gallery).
+	interface ProfileArtwork {
+		id: string;
+		title: string;
+		imageUrl: string;
+		thumbnailUrl: string | null;
+		creatorName: string;
+		collaborators: number;
+	}
+	let artworks = $state<ProfileArtwork[]>([]);
+	let artworksLoading = $state(true);
+
+	async function loadArtworks(userId: number) {
+		artworksLoading = true;
+		try {
+			const res = await fetch(`/api/artworks?userId=${userId}&limit=48`);
+			const data = await res.json();
+			artworks = res.ok && data.status === 'success' ? data.docs : [];
+		} catch {
+			artworks = [];
+		} finally {
+			artworksLoading = false;
+		}
+	}
+
+	$effect(() => {
+		void loadArtworks(profileId);
+	});
+
 	$effect(() => {
 		resetProfileStore();
 		const viewerUserId = $authUserStore.user?.id;
@@ -65,9 +94,13 @@
 							ออกจากระบบ
 						</button>
 						<div class="flex items-center gap-sm text-xs text-gray-400">
-							<a href="/legal/terms" class="hover:text-primary-500 hover:underline">ข้อกำหนดการใช้งาน</a>
+							<a href="/legal/terms" class="hover:text-primary-500 hover:underline"
+								>ข้อกำหนดการใช้งาน</a
+							>
 							<span class="text-gray-300">·</span>
-							<a href="/legal/privacy" class="hover:text-primary-500 hover:underline">นโยบายความเป็นส่วนตัว</a>
+							<a href="/legal/privacy" class="hover:text-primary-500 hover:underline"
+								>นโยบายความเป็นส่วนตัว</a
+							>
 						</div>
 					</div>
 				{/if}
@@ -98,7 +131,9 @@
 		<section>
 			<!-- Tabs -->
 			<div class="mb-lg flex items-center justify-between gap-md">
-				<div class="flex gap-xs rounded-xl border border-primary-100/60 bg-white/85 p-2xs shadow-sm">
+				<div
+					class="flex gap-xs rounded-xl border border-primary-100/60 bg-white/85 p-2xs shadow-sm"
+				>
 					<button
 						type="button"
 						onclick={() => setActiveTab('created')}
@@ -179,7 +214,9 @@
 						class="flex flex-col items-center gap-md rounded-2xl border border-primary-100/60 bg-white/85 py-2xl text-center shadow-sm"
 					>
 						<span class="text-5xl">💗</span>
-						<p class="text-gray-700">{isOwner ? 'คุณยังไม่ได้ถูกใจเกมไหนเลย' : 'ผู้ใช้นี้ยังไม่ได้ถูกใจเกมไหนเลย'}</p>
+						<p class="text-gray-700">
+							{isOwner ? 'คุณยังไม่ได้ถูกใจเกมไหนเลย' : 'ผู้ใช้นี้ยังไม่ได้ถูกใจเกมไหนเลย'}
+						</p>
 					</div>
 				{:else}
 					<div class="grid gap-lg sm:grid-cols-2 lg:grid-cols-3">
@@ -188,6 +225,74 @@
 						{/each}
 					</div>
 				{/if}
+			{/if}
+		</section>
+
+		<!-- Draw Together gallery -->
+		<section class="mt-2xl">
+			<div class="mb-lg flex items-center justify-between gap-md">
+				<h2 class="text-lg font-semibold text-gray-900">
+					{isOwner ? 'แกลเลอรีของฉัน' : 'แกลเลอรีผลงาน'}
+				</h2>
+				{#if isOwner}
+					<a
+						href="/game/draw"
+						class="rounded-lg bg-primary-500 px-md py-xs text-sm font-medium text-white transition-colors hover:bg-primary-400 active:bg-primary-600"
+					>
+						🎨 ไปวาดด้วยกัน
+					</a>
+				{/if}
+			</div>
+			<p class="mb-lg text-sm text-gray-500">
+				{isOwner
+					? 'ผลงานที่คุณเผยแพร่หรือร่วมวาดใน “วาดรูปด้วยกัน”'
+					: 'ผลงานที่ผู้ใช้นี้เผยแพร่หรือร่วมวาด'}
+			</p>
+
+			{#if artworksLoading}
+				<div class="grid grid-cols-2 gap-lg md:grid-cols-3 lg:grid-cols-4">
+					{#each Array(4) as _, i (i)}
+						<div class="aspect-[4/3] animate-pulse rounded-2xl bg-white/60"></div>
+					{/each}
+				</div>
+			{:else if artworks.length === 0}
+				<div
+					class="flex flex-col items-center gap-sm rounded-2xl border border-primary-100/60 bg-white/85 py-2xl text-center"
+				>
+					<span class="text-5xl">🎨</span>
+					<p class="text-gray-700">
+						{isOwner ? 'คุณยังไม่มีผลงานในแกลเลอรี' : 'ผู้ใช้นี้ยังไม่มีผลงานในแกลเลอรี'}
+					</p>
+				</div>
+			{:else}
+				<ul class="grid grid-cols-2 gap-lg md:grid-cols-3 lg:grid-cols-4">
+					{#each artworks as art (art.id)}
+						<li>
+							<a
+								href="/artworks/{art.id}"
+								class="group block overflow-hidden rounded-2xl border border-primary-100 bg-white shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
+							>
+								<div class="flex aspect-[4/3] items-center justify-center bg-gray-50">
+									<img
+										src={art.thumbnailUrl ?? art.imageUrl}
+										alt={art.title}
+										loading="lazy"
+										class="h-full w-full object-contain"
+									/>
+								</div>
+								<div class="px-3 py-2">
+									<p class="truncate text-sm font-semibold text-gray-900">{art.title}</p>
+									<p class="truncate text-xs text-gray-500">
+										{art.collaborators > 1 ? '👥' : '👤'}
+										{art.collaborators > 1
+											? `${art.creatorName} + ${art.collaborators - 1} คน`
+											: art.creatorName}
+									</p>
+								</div>
+							</a>
+						</li>
+					{/each}
+				</ul>
 			{/if}
 		</section>
 	</div>

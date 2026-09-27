@@ -60,3 +60,13 @@ export async function deleteImage(key: string): Promise<void> {
 		})
 	);
 }
+
+/** Stores raw bytes at an exact key (used for published artworks) and returns the public URL. */
+export async function putObject(key: string, body: Buffer | string, contentType: string): Promise<string> {
+	if (!env.R2_BUCKET_NAME) throw new Error('R2_BUCKET_NAME is not set');
+	if (!env.R2_PUBLIC_URL) throw new Error('R2_PUBLIC_URL is not set');
+	await r2.send(
+		new PutObjectCommand({ Bucket: env.R2_BUCKET_NAME, Key: key, Body: body, ContentType: contentType })
+	);
+	return `${env.R2_PUBLIC_URL}/${key}`;
+}

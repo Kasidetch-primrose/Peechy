@@ -56,7 +56,7 @@
 	const navLinks = [
 		{ href: '/', label: 'หน้าหลัก' },
 		{ href: '/game/create', label: 'สร้างเกม' },
-		{ href: '/game/draw', label: 'วาดรูปด้วยกัน' }
+		{ href: '/artworks', label: 'วาดรูปด้วยกัน' }
 	];
 
 	async function handleLogout() {
