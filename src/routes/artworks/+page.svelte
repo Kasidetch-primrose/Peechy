@@ -47,16 +47,28 @@
 </svelte:head>
 
 <div class="mx-auto w-full max-w-[72rem] px-4 py-10">
-	<div class="flex flex-wrap items-end justify-between gap-3">
-		<div>
-			<h1 class="text-2xl font-bold text-gray-900">แกลเลอรีผลงาน</h1>
-			<p class="mt-1 text-sm text-gray-500">ผลงานที่ทุกคนช่วยกันวาดใน “วาดรูปด้วยกัน”</p>
+	<!-- Big, hard-to-miss CTA: this is the actual entry point into Draw Together,
+	     the gallery page is just the front door now that the navbar points here. -->
+	<div
+		class="relative flex flex-col items-center gap-5 overflow-hidden rounded-3xl border border-primary-200 bg-linear-to-br from-primary-100 via-primary-50 to-white px-6 py-8 text-center shadow-md sm:flex-row sm:justify-between sm:text-left md:px-10 md:py-10"
+	>
+		<div
+			class="pointer-events-none absolute -top-10 -right-10 text-[9rem] leading-none opacity-10 select-none"
+			aria-hidden="true"
+		>
+			🎨
+		</div>
+		<div class="relative">
+			<h1 class="text-2xl font-bold text-gray-900 md:text-3xl">แกลเลอรีผลงาน</h1>
+			<p class="mt-1.5 text-sm text-gray-500 md:text-base">ผลงานที่ทุกคนช่วยกันวาดใน “วาดรูปด้วยกัน”</p>
 		</div>
 		<a
 			href="/game/draw"
-			class="rounded-full bg-primary-500 px-4 py-2 text-sm font-semibold text-white transition-all hover:bg-primary-400 active:scale-95"
+			class="group relative flex shrink-0 items-center gap-2 rounded-full bg-primary-500 px-7 py-3.5 text-base font-bold text-white shadow-lg shadow-primary-300/50 transition-all hover:-translate-y-0.5 hover:bg-primary-400 hover:shadow-xl hover:shadow-primary-300/60 active:scale-95"
 		>
+			<span class="absolute inset-0 -z-10 animate-ping rounded-full bg-primary-400/60"></span>
 			🎨 ไปวาดด้วยกัน
+			<span class="transition-transform group-hover:translate-x-1" aria-hidden="true">→</span>
 		</a>
 	</div>
 
