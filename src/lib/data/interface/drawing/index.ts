@@ -50,6 +50,38 @@ export interface IStroke {
 
 export type DrawTool = 'pen' | 'eraser' | 'bucket';
 
+// A trace-image layer under the drawing. x/y (top-left) and width are
+// fractions (0..1) of the paper's width/height, so it sits in the same place
+// on every screen; height follows from `aspect` (natural width / height).
+export interface IDrawReference {
+	id: string;
+	url: string;
+	name: string;
+	x: number;
+	y: number;
+	width: number;
+	aspect: number;
+	// Degrees, clockwise, in (-180, 180], about the image's centre. x/y/width
+	// describe the UNrotated box; rotation is applied on top of it.
+	rotation: number;
+	opacity: number;
+	locked: boolean; // static / trace mode — can't be moved, resized, rotated or deleted
+	// The uploader. Only they can change `isPublic`. '' = an old image with no owner.
+	ownerId: string;
+	ownerName: string;
+	// false (the default for a new upload): the server only ever sends it to its owner.
+	// true: everyone in the room sees it and can adjust it.
+	isPublic: boolean;
+}
+
+// Who is currently moving/resizing a layer (one person per layer at a time).
+export interface IRefController {
+	playerId: string;
+	name: string;
+}
+
+export type RefDeniedReason = 'locked' | 'busy' | 'invalid' | 'limit';
+
 // A room-wide vote to clear the canvas. votes: playerId -> true (yes) /
 // null (hasn't answered). The starter is always true.
 export interface IClearVote {
@@ -67,4 +99,29 @@ export interface IClearNotice {
 	status: ClearResultStatus | 'busy' | 'cooldown';
 	byName?: string;
 	seconds?: number;
+}
+
+// Publishing to the gallery is a room vote like clearing (server: draw.ts).
+export interface IPublishVote {
+	initiatorId: string;
+	initiatorName: string;
+	title: string;
+	expiresAt: number;
+	votes: Record<string, boolean | null>;
+}
+
+export interface IPublishMeta {
+	title: string;
+	description: string;
+	creatorName: string;
+}
+
+// A short message about the last publish attempt. 'published' carries the new artwork.
+export interface IPublishNotice {
+	id: number;
+	status: 'approved' | 'rejected' | 'expired' | 'cancelled' | 'busy' | 'cooldown' | 'invalid' | 'published' | 'failed';
+	byName?: string;
+	seconds?: number;
+	artworkId?: string;
+	title?: string;
 }

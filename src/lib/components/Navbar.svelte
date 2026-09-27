@@ -3,68 +3,60 @@
 	import logo from '$lib/assets/logo.png';
 	import AuthService from '$lib/data/services/auth';
 	import { authUserStore } from '$lib/data/stores/authUser';
-	// ── Multiplayer join-by-code logic — commented out while realtime-server
-	// (Railway) is offline. To restore: uncomment this import block, the state
-	// + functions block below, drop `disabled: true` from the "วาดรูปด้วยกัน"
-	// entry in navLinks, and swap the disabled markup back to the original in
-	// the template (see matching comments below). See memory:
-	// peechy-multiplayer-temporarily-disabled for the full picture.
-	// import { connect, joinRoom } from '$lib/data/stores/multiplayer';
-	// import { saveGuestName, getGuestId, type PlayerIdentity } from '$lib/utils/guest-identity';
-	// import GuestNameModal from '$lib/components/GuestNameModal.svelte';
+	import { connect, joinRoom } from '$lib/data/stores/multiplayer';
+	import { saveGuestName, getGuestId, type PlayerIdentity } from '$lib/utils/guest-identity';
+	import GuestNameModal from '$lib/components/GuestNameModal.svelte';
 
 	let mobileMenuOpen = $state(false);
+	let joinCode = $state('');
+	let joining = $state(false);
+	let showGuestModal = $state(false);
 
-	// let joinCode = $state('');
-	// let joining = $state(false);
-	// let showGuestModal = $state(false);
+	async function proceedJoin(identity: PlayerIdentity) {
+		const code = joinCode.trim();
+		joining = true;
+		connect(identity.id, identity.name);
+		const ok = await joinRoom(code);
+		joining = false;
+		if (ok) {
+			joinCode = '';
+			mobileMenuOpen = false;
+			goto(`/game/multiplayer/lobby/${code}`);
+		}
+	}
 
-	// async function proceedJoin(identity: PlayerIdentity) {
-	// 	const code = joinCode.trim();
-	// 	joining = true;
-	// 	connect(identity.id, identity.name);
-	// 	const ok = await joinRoom(code);
-	// 	joining = false;
-	// 	if (ok) {
-	// 		joinCode = '';
-	// 		mobileMenuOpen = false;
-	// 		goto(`/game/multiplayer/lobby/${code}`);
-	// 	}
-	// }
+	const isDrawCode = (c: string) => /^d\d{5}$/i.test(c);
+	const isValidCode = (c: string) => /^\d{5}$/.test(c) || isDrawCode(c);
 
-	// async function handleJoinRoom() {
-	// 	const code = joinCode.trim();
-	// 	if (code.length !== 5) return;
-	// 	const user = $authUserStore.user;
-	// 	if (user) {
-	// 		await proceedJoin({ id: String(user.id), name: user.username });
-	// 		return;
-	// 	}
-	// 	// Guests are always prompted for a nickname, even if they've played before.
-	// 	showGuestModal = true;
-	// }
+	async function handleJoinRoom() {
+		const code = joinCode.trim();
+		if (!isValidCode(code)) return;
+		// One box, two kinds of rooms: "D12345" (any case) is a Draw Together room,
+		// plain digits are a guess-game room.
+		if (isDrawCode(code)) {
+			joinCode = '';
+			mobileMenuOpen = false;
+			goto(`/game/draw/${code.toUpperCase()}`);
+			return;
+		}
+		const user = $authUserStore.user;
+		if (user) {
+			await proceedJoin({ id: String(user.id), name: user.username });
+			return;
+		}
+		// Guests are always prompted for a nickname, even if they've played before.
+		showGuestModal = true;
+	}
 
-	// function handleGuestConfirm(name: string) {
-	// 	saveGuestName(name);
-	// 	proceedJoin({ id: getGuestId(), name });
-	// }
-
-	// Multiplayer backend is offline (Railway trial expired) — entry points
-	// below are disabled and just point people to this message instead.
-	let toast = $state<string | null>(null);
-	let toastTimer: ReturnType<typeof setTimeout> | undefined;
-	function showComingSoonToast() {
-		toast = '🚧 ฟีเจอร์นี้อยู่ระหว่างการพัฒนา จะพร้อมใช้งานเร็วๆ นี้';
-		clearTimeout(toastTimer);
-		toastTimer = setTimeout(() => (toast = null), 2500);
+	function handleGuestConfirm(name: string) {
+		saveGuestName(name);
+		proceedJoin({ id: getGuestId(), name });
 	}
 
 	const navLinks = [
 		{ href: '/', label: 'หน้าหลัก' },
 		{ href: '/game/create', label: 'สร้างเกม' },
-		// disabled: true while multiplayer backend is offline — remove this
-		// field to restore the real link (href already points to /game/draw).
-		{ href: '/game/draw', label: 'วาดรูปด้วยกัน', disabled: true }
+		{ href: '/artworks', label: 'วาดรูปด้วยกัน' }
 	];
 
 	async function handleLogout() {
@@ -98,49 +90,34 @@
 		<ul class="hidden items-center gap-sm md:flex" role="list">
 			{#each navLinks as link}
 				<li>
-					{#if link.disabled}
-						<button
-							type="button"
-							onclick={showComingSoonToast}
-							class="rounded-full px-sm py-xs text-sm font-medium text-gray-400 transition-colors
-                                   hover:bg-primary-50
-                                   focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:outline-none"
-						>
-							{link.label}
-						</button>
-					{:else}
-						<a
-							href={link.href}
-							class="rounded-full px-sm py-xs text-sm font-medium text-gray-700 transition-colors
-                                   hover:bg-primary-100 hover:text-primary-500
-                                   focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:outline-none"
-						>
-							{link.label}
-						</a>
-					{/if}
+					<a
+						href={link.href}
+						class="rounded-full px-sm py-xs text-sm font-medium text-gray-700 transition-colors
+                               hover:bg-primary-100 hover:text-primary-500
+                               focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:outline-none"
+					>
+						{link.label}
+					</a>
 				</li>
 			{/each}
 		</ul>
 
 		<!-- Desktop CTA -->
 		<div class="hidden items-center gap-sm md:flex">
-			<!-- Join multiplayer room by code — backend offline, see showComingSoonToast.
-			     Original working version commented out below; swap back in when
-			     the realtime-server is back online.
+			<!-- Join multiplayer room by code -->
 			<div class="flex items-center overflow-hidden rounded-full border border-primary-300 bg-white">
 				<input
 					type="text"
 					bind:value={joinCode}
-					maxlength="5"
-					inputmode="numeric"
+					maxlength="6"
 					placeholder="รหัสห้อง"
-					class="w-24 bg-transparent px-3 py-1.5 text-sm text-gray-700 outline-none placeholder:text-gray-400"
+					class="w-36 bg-transparent px-3 py-1.5 text-sm text-gray-700 outline-none placeholder:text-gray-400"
 					onkeydown={(e) => e.key === 'Enter' && handleJoinRoom()}
 				/>
 				<button
 					type="button"
 					onclick={handleJoinRoom}
-					disabled={joining || joinCode.trim().length !== 5}
+					disabled={joining || !isValidCode(joinCode.trim())}
 					class="flex items-center justify-center bg-primary-500 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-primary-400 disabled:cursor-not-allowed disabled:bg-btn-primary-disabled"
 				>
 					{#if joining}
@@ -153,14 +130,6 @@
 					{/if}
 				</button>
 			</div>
-			-->
-			<button
-				type="button"
-				onclick={showComingSoonToast}
-				class="flex items-center gap-1.5 rounded-full border border-primary-200 bg-white px-4 py-1.5 text-sm text-gray-400 transition-colors hover:border-primary-300"
-			>
-				รหัสห้อง · เข้าร่วม
-			</button>
 			{#if $authUserStore.user}
 				<div class="flex items-center gap-3">
 					<a
@@ -252,38 +221,21 @@
 			<ul class="flex flex-col gap-md" role="list">
 				{#each navLinks as link}
 					<li>
-						{#if link.disabled}
-							<button
-								type="button"
-								onclick={() => {
-									showComingSoonToast();
-									mobileMenuOpen = false;
-								}}
-								class="block w-full rounded-full px-sm py-xs text-left text-sm font-medium text-gray-400 hover:bg-primary-50"
-							>
-								{link.label}
-							</button>
-						{:else}
-							<a
-								href={link.href}
-								class="block rounded-full px-sm py-xs text-sm font-medium text-gray-700 hover:bg-primary-100 hover:text-primary-500"
-								onclick={() => (mobileMenuOpen = false)}
-							>
-								{link.label}
-							</a>
-						{/if}
+						<a
+							href={link.href}
+							class="block rounded-full px-sm py-xs text-sm font-medium text-gray-700 hover:bg-primary-100 hover:text-primary-500"
+							onclick={() => (mobileMenuOpen = false)}
+						>
+							{link.label}
+						</a>
 					</li>
 				{/each}
-				<!-- Join multiplayer room by code — backend offline, see showComingSoonToast.
-				     Original working version commented out below; swap back in when
-				     the realtime-server is back online.
 				<li>
 					<div class="flex items-center overflow-hidden rounded-full border border-primary-300 bg-white">
 						<input
 							type="text"
 							bind:value={joinCode}
-							maxlength="5"
-							inputmode="numeric"
+							maxlength="6"
 							placeholder="รหัสห้อง"
 							class="w-full bg-transparent px-3 py-2 text-sm text-gray-700 outline-none placeholder:text-gray-400"
 							onkeydown={(e) => e.key === 'Enter' && handleJoinRoom()}
@@ -291,7 +243,7 @@
 						<button
 							type="button"
 							onclick={handleJoinRoom}
-							disabled={joining || joinCode.trim().length !== 5}
+							disabled={joining || !isValidCode(joinCode.trim())}
 							class="flex items-center justify-center bg-primary-500 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-primary-400 disabled:cursor-not-allowed disabled:bg-btn-primary-disabled"
 						>
 							{#if joining}
@@ -304,19 +256,6 @@
 							{/if}
 						</button>
 					</div>
-				</li>
-				-->
-				<li>
-					<button
-						type="button"
-						onclick={() => {
-							showComingSoonToast();
-							mobileMenuOpen = false;
-						}}
-						class="flex w-full items-center justify-center rounded-full border border-primary-200 bg-white px-3 py-2 text-sm text-gray-400"
-					>
-						รหัสห้อง · เข้าร่วม
-					</button>
 				</li>
 				<li class="border-t border-primary-200/50 pt-md">
 					{#if $authUserStore.user}
@@ -359,20 +298,8 @@
 	{/if}
 </header>
 
-{#if toast}
-	<div
-		class="pointer-events-none fixed top-20 left-1/2 z-[80] -translate-x-1/2 rounded-2xl bg-gray-900/90 px-4 py-3 text-center text-sm text-white shadow-xl"
-		role="status"
-	>
-		{toast}
-	</div>
-{/if}
-
-<!-- Original guest-nickname modal for join-by-code — commented out with the
-     rest of the multiplayer logic above.
 <GuestNameModal
 	bind:open={showGuestModal}
 	onConfirm={handleGuestConfirm}
 	onCancel={() => (showGuestModal = false)}
 />
--->

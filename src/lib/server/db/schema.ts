@@ -5,3 +5,4 @@ export * from './ImagesModel';
 export * from './ImageHintsModel';
 export * from './MultiplayerModel';
 export * from './auth.schema';
+export * from './ArtworksModel';

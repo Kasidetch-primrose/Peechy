@@ -69,6 +69,33 @@ export interface DrawRoomState {
 	createdAt: number;
 }
 
+// A shared "trace" image layer under the drawing. x/y are the top-left corner
+// and width is the image width, all as fractions (0..1) of the paper's
+// width/height so it lands in the same place on every screen. Height is derived
+// from `aspect` (natural width / height), so the image can never be distorted.
+// (Visibility is per-player and never stored here.)
+export interface DrawReference {
+	id: string;
+	url: string;
+	name: string;
+	x: number;
+	y: number;
+	width: number;
+	aspect: number;
+	// Degrees, clockwise, in (-180, 180], about the image's centre. x/y/width
+	// describe the UNrotated box; rotation is applied on top of it.
+	rotation: number;
+	opacity: number;
+	locked: boolean; // static/trace mode: nobody can move, resize, rotate or delete it
+	// Who uploaded it. Only the owner can flip `isPublic`. '' = an image from before
+	// ownership existed (public, and anyone may change its visibility).
+	ownerId: string;
+	ownerName: string;
+	// false (the default for a new upload): only the owner is ever sent this layer.
+	// true: everyone in the room sees it and can adjust it.
+	isPublic: boolean;
+}
+
 export interface Point {
 	x: number;
 	y: number;

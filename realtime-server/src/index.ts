@@ -11,7 +11,31 @@ const CORS_ORIGIN = (process.env.CORS_ORIGIN ?? 'http://localhost:5173')
 	.split(',')
 	.map((origin) => origin.trim());
 
-const httpServer = createServer();
+// Private endpoint for the web app: redeem a publish ticket (one time) and get
+// the frozen snapshot of the room. Guarded by a shared secret; everything else
+// is Socket.IO's.
+const INTERNAL_SECRET = process.env.INTERNAL_SECRET ?? '';
+const httpServer = createServer((req, res) => {
+	const match = /^\/internal\/publish-ticket\/([0-9a-f]{48})$/.exec(req.url ?? '');
+	if (!match || req.method !== 'GET') {
+		res.statusCode = 404;
+		res.end();
+		return;
+	}
+	if (!INTERNAL_SECRET || req.headers['x-internal-secret'] !== INTERNAL_SECRET) {
+		res.statusCode = 403;
+		res.end();
+		return;
+	}
+	const snapshot = draw.redeemPublishTicket(match[1]);
+	res.setHeader('Content-Type', 'application/json');
+	if (!snapshot) {
+		res.statusCode = 404;
+		res.end(JSON.stringify({ error: 'ticket not found or expired' }));
+		return;
+	}
+	res.end(JSON.stringify(snapshot));
+});
 const io = new Server(httpServer, {
 	cors: { origin: CORS_ORIGIN }
 });
@@ -111,15 +135,23 @@ io.on('connection', (socket) => {
 		}
 	});
 
-	socket.on('draw:room:join', async ({ code }, callback) => {
+	socket.on('draw:room:join', async (payload, callback) => {
 		try {
+			const code = String(payload?.code ?? '').trim().toUpperCase();
 			const result = await draw.joinRoom(code, playerId, playerName);
 			if (!result) return callback?.({ ok: false, message: 'ไม่พบห้องนี้' });
 
 			socket.join(`draw:${code}`);
 			const player = result.players.find((p) => p.id === playerId);
 			if (player) io.to(`draw:${code}`).emit('draw:room:playerJoined', { player });
-			callback?.({ ok: true, room: result.room, players: result.players, strokes: result.strokes });
+			callback?.({
+				ok: true,
+				room: result.room,
+				players: result.players,
+				strokes: result.strokes,
+				references: result.references,
+				referenceControllers: result.referenceControllers
+			});
 		} catch (e) {
 			callback?.({ ok: false, message: (e as Error).message });
 		}
@@ -156,6 +188,101 @@ io.on('connection', (socket) => {
 		socket.to(`draw:${code}`).emit('draw:stroke:end', { strokeId });
 	});
 
+	// Shared trace images / layers (see draw.ts). Position and size are relayed
+	// live to the others while someone holds an image; everything else is
+	// broadcast to all as the full (small) layer stack.
+	socket.on(
+		'draw:ref:add',
+		async ({ code, url, aspect, name }: { code: string; url: unknown; aspect: unknown; name: unknown }) => {
+			if (!inDrawRoom(code)) return;
+			await draw.addReference(io, code, playerId, playerName, { url, aspect, name });
+		}
+	);
+
+	socket.on(
+		'draw:ref:patch',
+		async ({
+			code,
+			id,
+			patch
+		}: {
+			code: string;
+			id: unknown;
+			patch: { opacity?: unknown; locked?: unknown; rotation?: unknown };
+		}) => {
+			if (!inDrawRoom(code)) return;
+			await draw.patchReference(io, code, playerId, id, patch ?? {});
+		}
+	);
+
+	// Owner-only: make some/all of their images public or private in one go.
+	socket.on(
+		'draw:ref:visibility',
+		async ({ code, ids, isPublic }: { code: string; ids: unknown; isPublic: unknown }) => {
+			if (!inDrawRoom(code)) return;
+			await draw.setReferencesVisibility(io, code, playerId, ids, isPublic);
+		}
+	);
+
+	socket.on(
+		'draw:ref:reorder',
+		async ({ code, id, direction }: { code: string; id: unknown; direction: unknown }) => {
+			if (!inDrawRoom(code)) return;
+			await draw.reorderReference(io, code, playerId, id, direction);
+		}
+	);
+
+	socket.on('draw:ref:grab', async ({ code, id }: { code: string; id: unknown }) => {
+		if (!inDrawRoom(code)) return;
+		await draw.grabReference(io, code, playerId, playerName, id);
+	});
+
+	socket.on(
+		'draw:ref:move',
+		({
+			code,
+			id,
+			x,
+			y,
+			width,
+			rotation
+		}: {
+			code: string;
+			id: unknown;
+			x: unknown;
+			y: unknown;
+			width: unknown;
+			rotation: unknown;
+		}) => {
+			if (!inDrawRoom(code)) return;
+			const reference = draw.moveReference(code, playerId, { id, x, y, width, rotation });
+			if (reference) {
+				// A private image is only ever relayed to its owner (their other tabs).
+				const audience =
+					reference.isPublic || reference.ownerId === '' ? `draw:${code}` : `player:${reference.ownerId}`;
+				socket
+					.to(audience)
+					.emit('draw:ref:moved', {
+						id: reference.id,
+						x: reference.x,
+						y: reference.y,
+						width: reference.width,
+						rotation: reference.rotation
+					});
+			}
+		}
+	);
+
+	socket.on('draw:ref:release', async ({ code, id }: { code: string; id: unknown }) => {
+		if (!inDrawRoom(code)) return;
+		await draw.releaseReference(io, code, playerId, id);
+	});
+
+	socket.on('draw:ref:delete', async ({ code, id }: { code: string; id: unknown }) => {
+		if (!inDrawRoom(code)) return;
+		await draw.deleteReference(io, code, playerId, id);
+	});
+
 	// Clearing the canvas is a room vote (see draw.ts); there is no direct clear.
 	socket.on('draw:clear:request', async ({ code }: { code: string }) => {
 		if (!inDrawRoom(code)) return;
@@ -171,6 +298,31 @@ io.on('connection', (socket) => {
 		if (!inDrawRoom(code)) return;
 		draw.cancelClear(io, code, playerId);
 	});
+
+	// Publishing to the gallery is a room vote too (see draw.ts).
+	socket.on('draw:publish:request', async ({ code, meta }: { code: string; meta: unknown }) => {
+		if (!inDrawRoom(code)) return;
+		await draw.requestPublish(io, code, playerId, meta);
+	});
+
+	socket.on('draw:publish:respond', async ({ code, approve }: { code: string; approve: boolean }) => {
+		if (!inDrawRoom(code)) return;
+		await draw.respondPublish(io, code, playerId, approve === true);
+	});
+
+	socket.on('draw:publish:cancel', async ({ code }: { code: string }) => {
+		if (!inDrawRoom(code)) return;
+		await draw.cancelPublish(io, code, playerId);
+	});
+
+	// The requester reports the finished artwork so everyone gets the link.
+	socket.on(
+		'draw:publish:done',
+		({ code, artworkId, title }: { code: string; artworkId: unknown; title: unknown }) => {
+			if (!inDrawRoom(code)) return;
+			draw.announcePublished(io, code, playerId, artworkId, title);
+		}
+	);
 
 	socket.on('draw:undo', ({ code }: { code: string }) => {
 		if (!inDrawRoom(code)) return;

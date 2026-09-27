@@ -1,4 +1,4 @@
-<script lang="ts">
+﻿<script lang="ts">
 	import { onDestroy, onMount } from 'svelte';
 	import MultiplayerService from '$lib/data/services/multiplayer';
 	import DrawingService from '$lib/data/services/multiplayer/drawing';
@@ -6,7 +6,9 @@
 		DRAW_RATIO_VALUE,
 		type DrawRatio,
 		type DrawTool,
+		type IDrawReference,
 		type IPoint,
+		type IRefController,
 		type IStroke
 	} from '$lib/data/interface/drawing';
 
@@ -22,6 +24,19 @@
 		canUndo?: boolean;
 		// Changes when the parent has replaced initialStrokes (reconnect re-sync).
 		syncVersion?: number;
+		// The trace-image layers to show, bottom → top, drawn under the strokes.
+		// (The server only sends public layers and this player's own private ones.)
+		layers?: IDrawReference[];
+		// Who is currently dragging each layer.
+		refControllers?: Record<string, IRefController>;
+		// The selected layer: shows resize/rotate handles while it is unlocked.
+		selectedId?: string | null;
+		// Clicking an unlocked image selects it; clicking empty paper passes null.
+		onSelect?: (id: string | null) => void;
+		// Lock the selected image (trace mode) straight from its toolbar.
+		onLock?: (id: string) => void;
+		// A panel/selection is focused: the next press on the paper only un-focuses it (no stroke).
+		blockDraw?: boolean;
 	}
 
 	let {
@@ -33,7 +48,13 @@
 		color,
 		strokeWidth,
 		canUndo = $bindable(false),
-		syncVersion = 0
+		syncVersion = 0,
+		layers = [],
+		refControllers = {},
+		selectedId = null,
+		onSelect = () => {},
+		onLock = () => {},
+		blockDraw = false
 	}: Props = $props();
 
 	// The eraser is easier to use with a wider tip than the pen at the same slider value.
@@ -516,6 +537,189 @@
 		redrawAll();
 	}
 
+	// ── Trace-image layers: move / resize the selected one ───────────────────
+	// While dragging, the layer follows the pointer locally (dragRef) and its
+	// position is relayed once per frame. The server only accepts moves from
+	// whoever holds the layer, so this is optimistic: if someone else already has
+	// it, the effect below drops the local drag.
+	type Corner = 'nw' | 'ne' | 'sw' | 'se';
+	let dragRef = $state<IDrawReference | null>(null);
+	const renderLayers = $derived(layers.map((l) => (dragRef && dragRef.id === l.id ? dragRef : l)));
+	// Unlocked images take the pointer directly (drag / resize / rotate); locked ones are
+	// static and let drawing through.
+	const interactiveLayers = $derived(renderLayers.filter((l) => !l.locked));
+	const controlledByOther = (id: string) =>
+		!!refControllers[id] && refControllers[id].playerId !== selfId;
+	// sx/sy: which side of the image's centre the corner is on (-1 = left/top, +1 = right/bottom).
+	const CORNERS: { id: Corner; sx: -1 | 1; sy: -1 | 1; classes: string }[] = [
+		{ id: 'nw', sx: -1, sy: -1, classes: 'top-0 left-0 -translate-x-1/2 -translate-y-1/2 cursor-nwse-resize' },
+		{ id: 'ne', sx: 1, sy: -1, classes: 'top-0 right-0 translate-x-1/2 -translate-y-1/2 cursor-nesw-resize' },
+		{ id: 'sw', sx: -1, sy: 1, classes: 'bottom-0 left-0 -translate-x-1/2 translate-y-1/2 cursor-nesw-resize' },
+		{ id: 'se', sx: 1, sy: 1, classes: 'right-0 bottom-0 translate-x-1/2 translate-y-1/2 cursor-nwse-resize' }
+	];
+
+	let refDrag: {
+		pointerId: number;
+		layerId: string;
+		kind: 'move' | 'rotate' | Corner;
+		start: IDrawReference;
+		startPx: number;
+		startPy: number;
+	} | null = null;
+	let refPending: IDrawReference | null = null;
+	let refRaf: number | null = null;
+
+	function paperPointer(e: PointerEvent) {
+		const rect = canvasEl.getBoundingClientRect();
+		return {
+			px: (e.clientX - rect.left) / rect.width,
+			py: (e.clientY - rect.top) / rect.height,
+			ratio: rect.width / rect.height, // paper width / height, to turn width into height
+			pw: rect.width,
+			ph: rect.height
+		};
+	}
+
+	const clampNum = (n: number, min: number, max: number) => Math.min(max, Math.max(min, n));
+
+	// Any angle -> degrees in (-180, 180].
+	function normalizeAngle(deg: number): number {
+		const wrapped = ((((deg + 180) % 360) + 360) % 360) - 180;
+		return wrapped === -180 ? 180 : wrapped;
+	}
+
+	function beginRefDrag(e: PointerEvent, layer: IDrawReference, kind: 'move' | 'rotate' | Corner) {
+		if (refDrag || layer.locked) return;
+		if (e.pointerType === 'mouse' && e.button !== 0) return;
+		e.preventDefault();
+		e.stopPropagation();
+		onSelect(layer.id);
+		if (controlledByOther(layer.id)) return;
+		(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+		const { px, py } = paperPointer(e);
+		refDrag = {
+			pointerId: e.pointerId,
+			layerId: layer.id,
+			kind,
+			start: { ...layer },
+			startPx: px,
+			startPy: py
+		};
+		dragRef = { ...layer };
+		DrawingService.refGrab(code, layer.id);
+	}
+
+	function moveRefDrag(e: PointerEvent) {
+		if (!refDrag || e.pointerId !== refDrag.pointerId) return;
+		const { px, py, ratio: paperRatio, pw, ph } = paperPointer(e);
+		const s = refDrag.start;
+		let next: IDrawReference;
+
+		// Rotation is about the image's centre, so resizing and rotating are done in
+		// pixels (the paper isn't square) and converted back to paper fractions.
+		const startWidthPx = s.width * pw;
+		const startHeightPx = startWidthPx / s.aspect;
+		const centerX = s.x * pw + startWidthPx / 2;
+		const centerY = s.y * ph + startHeightPx / 2;
+
+		if (refDrag.kind === 'move') {
+			next = { ...s, x: s.x + (px - refDrag.startPx), y: s.y + (py - refDrag.startPy) };
+		} else if (refDrag.kind === 'rotate') {
+			// The handle sits straight above the centre (angle -90°), so add 90° back.
+			let degrees = (Math.atan2(py * ph - centerY, px * pw - centerX) * 180) / Math.PI + 90;
+			const snapped = Math.round(degrees / 15) * 15; // gentle snap to 15° steps
+			if (Math.abs(degrees - snapped) < 4) degrees = snapped;
+			next = { ...s, rotation: normalizeAngle(degrees) };
+		} else {
+			// The corner opposite the dragged one stays put; aspect ratio is preserved.
+			const corner = CORNERS.find((c) => c.id === refDrag!.kind)!;
+			const theta = (s.rotation * Math.PI) / 180;
+			const cos = Math.cos(theta);
+			const sin = Math.sin(theta);
+			// Fixed corner in paper pixels: centre + R(θ)·(−corner offset).
+			const offX = -corner.sx * (startWidthPx / 2);
+			const offY = -corner.sy * (startHeightPx / 2);
+			const fixedX = centerX + offX * cos - offY * sin;
+			const fixedY = centerY + offX * sin + offY * cos;
+			// Pointer relative to the fixed corner, in the image's own (unrotated) axes.
+			const relX = px * pw - fixedX;
+			const relY = py * ph - fixedY;
+			const alongWidth = relX * cos + relY * sin;
+			const widthPx = clampNum(corner.sx * alongWidth, 0.05 * pw, 1.5 * pw);
+			const heightPx = widthPx / s.aspect;
+			// New centre = fixed corner + R(θ)·(half of the new size, towards the dragged corner).
+			const halfX = corner.sx * (widthPx / 2);
+			const halfY = corner.sy * (heightPx / 2);
+			const newCenterX = fixedX + halfX * cos - halfY * sin;
+			const newCenterY = fixedY + halfX * sin + halfY * cos;
+			next = {
+				...s,
+				width: widthPx / pw,
+				x: (newCenterX - widthPx / 2) / pw,
+				y: (newCenterY - heightPx / 2) / ph
+			};
+		}
+
+		// Same limits as the server so the image never visibly jumps back.
+		const height = (next.width * paperRatio) / next.aspect;
+		next.x = clampNum(next.x, -next.width + 0.1, 0.9);
+		next.y = clampNum(next.y, -height + 0.1, 0.9);
+
+		dragRef = next;
+		refPending = next;
+		if (refRaf === null) {
+			refRaf = requestAnimationFrame(() => {
+				refRaf = null;
+				flushRefMove();
+			});
+		}
+	}
+
+	function flushRefMove() {
+		if (!refPending) return;
+		DrawingService.refMove(
+			code,
+			refPending.id,
+			refPending.x,
+			refPending.y,
+			refPending.width,
+			refPending.rotation
+		);
+		refPending = null;
+	}
+
+	function endRefDrag(e: PointerEvent) {
+		if (!refDrag || e.pointerId !== refDrag.pointerId) return;
+		const { layerId } = refDrag;
+		refDrag = null;
+		flushRefMove();
+		DrawingService.refRelease(code, layerId);
+		// Keep showing the dropped position until the server's final state arrives.
+		setTimeout(() => {
+			if (!refDrag) dragRef = null;
+		}, 1200);
+	}
+
+	function abortRefDrag() {
+		if (refRaf !== null) cancelAnimationFrame(refRaf);
+		refRaf = null;
+		refPending = null;
+		refDrag = null;
+		dragRef = null;
+	}
+
+	// The server's authoritative state arrived (or the drag can no longer continue).
+	$effect(() => {
+		void layers;
+		if (!refDrag) dragRef = null;
+	});
+	$effect(() => {
+		if (refDrag) {
+			const cur = layers.find((l) => l.id === refDrag!.layerId);
+			if (!cur || cur.locked || controlledByOther(cur.id)) abortRefDrag();
+		}
+	});
+
 	onMount(() => {
 		allStrokes = [...initialStrokes];
 		syncCanUndo();
@@ -548,21 +752,91 @@
 		class="relative overflow-hidden rounded-xl border border-primary-200 bg-white shadow-md"
 		style="width: {paperSize.width}px; height: {paperSize.height}px;"
 	>
+		<!-- Trace images: a stack of layers under the drawing (later = higher), so strokes
+		     (and the eraser) never touch them. -->
+		{#each renderLayers as layer (layer.id)}
+			<img
+				src={layer.url}
+				alt=""
+				draggable="false"
+				class="pointer-events-none absolute z-0 max-w-none select-none"
+				style="left: {layer.x * 100}%; top: {layer.y * 100}%; width: {layer.width * 100}%; opacity: {layer.opacity}; transform: rotate({layer.rotation}deg);"
+			/>
+		{/each}
 		<canvas
 			bind:this={canvasEl}
-			class="block h-full w-full cursor-none select-none"
+			class="relative z-[1] block h-full w-full cursor-none select-none"
 			style="touch-action: pinch-zoom; -webkit-touch-callout: none; -webkit-user-select: none;"
 			oncontextmenu={(e) => e.preventDefault()}
-			onpointerdown={handlePointerDown}
+			onpointerdown={(e) => {
+				if (selectedId || blockDraw) {
+					// First click only drops the focus; the next one draws.
+					e.preventDefault();
+					onSelect(null);
+					return;
+				}
+				handlePointerDown(e);
+			}}
 			onpointermove={handlePointerMove}
 			onpointerup={handlePointerEnd}
 			onpointercancel={handlePointerEnd}
 			onpointerleave={handlePointerLeave}
 		></canvas>
+		<!-- Unlocked images sit above the drawing and take the pointer: click to select,
+		     drag to move; the selected one also gets resize / rotate handles. -->
+		{#each interactiveLayers as layer (layer.id)}
+			{@const selected = layer.id === selectedId}
+			{@const busy = controlledByOther(layer.id)}
+			<div
+				class="absolute cursor-move {selected ? 'z-10' : 'z-[5]'} {selected
+					? busy
+						? 'border-2 border-dashed border-amber-400'
+						: 'border-2 border-dashed border-primary-500'
+					: 'border border-transparent hover:border-primary-300'}"
+				style="left: {layer.x * 100}%; top: {layer.y * 100}%; width: {layer.width * 100}%; aspect-ratio: {layer.aspect}; transform: rotate({layer.rotation}deg); touch-action: none;"
+				role="presentation"
+				onpointerdown={(e) => beginRefDrag(e, layer, 'move')}
+				onpointermove={moveRefDrag}
+				onpointerup={endRefDrag}
+				onpointercancel={endRefDrag}
+			>
+				{#if selected && busy}
+					<span class="absolute top-1 left-1 rounded bg-amber-400/90 px-2 py-0.5 text-[10px] font-medium text-gray-900">
+						{refControllers[layer.id]?.name ?? 'เพื่อน'} กำลังจัดรูป
+					</span>
+				{:else if selected}
+					<!-- Rotate handle: drag around the image's centre (snaps to 15° steps) -->
+					<span
+						class="absolute top-2 left-1/2 flex h-7 w-7 -translate-x-1/2 cursor-grab items-center justify-center rounded-full border-2 border-white bg-primary-500 text-sm leading-none text-white shadow-md active:cursor-grabbing"
+						role="presentation"
+						title="หมุนรูป"
+						onpointerdown={(e) => beginRefDrag(e, layer, 'rotate')}
+					>
+						↻
+					</span>
+					<button
+						type="button"
+						class="absolute right-2 bottom-2 cursor-pointer rounded-full border-2 border-white bg-primary-500 px-2.5 py-1 text-xs font-medium text-white shadow-md"
+						title="ล็อกรูป (ลอกลาย) แล้ววาดทับได้เลย"
+						onpointerdown={(e) => e.stopPropagation()}
+						onclick={() => onLock(layer.id)}
+					>
+						🔒 ล็อก
+					</button>
+					{#each CORNERS as corner (corner.id)}
+						<span
+							class="absolute h-6 w-6 rounded-full border-2 border-white bg-primary-500 shadow-md {corner.classes}"
+							role="presentation"
+							onpointerdown={(e) => beginRefDrag(e, layer, corner.id)}
+						></span>
+					{/each}
+				{/if}
+			</div>
+		{/each}
 		{#if cursor.visible && tool === 'bucket'}
 			<!-- Tilted bucket pouring the chosen colour; the drip at its lower-left is the fill point (3, 25). -->
 			<svg
-				class="pointer-events-none absolute overflow-visible"
+				class="pointer-events-none absolute z-20 overflow-visible"
 				style="left: {cursor.x - 3}px; top: {cursor.y - 25}px; width: 28px; height: 28px;"
 				viewBox="0 0 28 28"
 				aria-hidden="true"
@@ -577,7 +851,7 @@
 			</svg>
 		{:else if cursor.visible}
 			<div
-				class="pointer-events-none absolute rounded-full"
+				class="pointer-events-none absolute z-20 rounded-full"
 				style="left: {cursor.x - brushDiameter / 2}px; top: {cursor.y - brushDiameter / 2}px; width: {brushDiameter}px; height: {brushDiameter}px; border: 1.5px {tool ===
 				'eraser'
 					? 'dashed'
