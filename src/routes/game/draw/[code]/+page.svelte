@@ -1100,6 +1100,11 @@
 			class="relative min-h-[8rem] min-w-0 flex-1 overflow-hidden rounded-2xl border border-primary-100 bg-primary-100/30 shadow-sm"
 		>
 			{#if $drawingStore.room}
+				<!-- Keyed on the room code: switching rooms without a full page reload (e.g. leave
+				     then create/join another) must not reuse this instance — it owns local imperative
+				     state (allStrokes, drag state, canvas context) that only resets on mount, so reusing
+				     it would leave the previous room's drawing showing through the new one. -->
+				{#key code}
 				<DrawCanvas
 					bind:this={canvasRef}
 					{code}
@@ -1122,6 +1127,7 @@
 						selectedRefId = null;
 					}}
 				/>
+				{/key}
 			{/if}
 		</div>
 

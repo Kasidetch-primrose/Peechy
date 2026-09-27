@@ -41,7 +41,16 @@ export async function createRoom(
 	while (await rooms.roomExists(code)) code = rooms.generateRoomCode();
 
 	const room = await rooms.createRoom({ code, hostId, ratio: safeRatio });
+	// The room code loop above only guarantees `code` is free in Redis. These
+	// process-memory caches have no TTL of their own and are normally only ever
+	// written for a code once it's created, but if this process previously ran a
+	// DIFFERENT room that used the same code (its Redis entry has since expired,
+	// freeing the code for reuse) their leftover entries would otherwise leak that
+	// old room's strokes/reference images into this brand new one.
 	roomStrokes.set(code, []);
+	roomReferences.delete(code);
+	roomPaperRatio.delete(code);
+	refControl.delete(code);
 	return { code, room };
 }
 
