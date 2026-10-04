@@ -64,9 +64,20 @@
 	// width, so a stroke keeps the same proportion on every screen.
 	const PAPER_WIDTH_UNITS = 1000;
 
+	// Everything is drawn onto ONE offscreen "world" canvas that has the same pixel size on every
+	// screen (WORLD_W wide, same shape as the paper); the visible canvas only shows a scaled copy.
+	// Bucket fills depend on exact pixels (is that gap in the outline wide enough to leak through?),
+	// so drawing at each screen's own size made identical strokes produce different pictures:
+	// a fill that stayed inside an outline on a laptop flooded the whole paper on a big monitor.
+	const WORLD_W = 1600;
+	let world: HTMLCanvasElement | null = null;
+	let wctx: CanvasRenderingContext2D | null = null;
+	let worldH = 0;
+	let worldRendered = false; // has the world been replayed from allStrokes at least once?
+
 	let canvasEl: HTMLCanvasElement;
 	let containerEl: HTMLDivElement;
-	let ctx: CanvasRenderingContext2D;
+	let ctx: CanvasRenderingContext2D; // the visible canvas
 
 	// Fitted size of the paper (largest box with the room's ratio that fits
 	// inside the available area). Purely local — never synced.
@@ -104,13 +115,14 @@
 	// NOT raw pixels — different players' screens (and this same window
 	// across a resize) have different canvas sizes. Pixel coordinates only
 	// exist transiently, right before a canvas draw call.
+	// "Pixel" coordinates here are positions on the fixed-size world canvas, not on screen.
 	function toPixelPoint(point: IPoint): IPoint {
-		const rect = canvasEl.getBoundingClientRect();
-		return { x: point.x * rect.width, y: point.y * rect.height };
+		ensureWorld();
+		return { x: point.x * WORLD_W, y: point.y * worldH };
 	}
 
 	function toPixelWidth(units: number): number {
-		return (units * canvasEl.getBoundingClientRect().width) / PAPER_WIDTH_UNITS;
+		return (units * WORLD_W) / PAPER_WIDTH_UNITS;
 	}
 
 	function clamp01(n: number): number {
@@ -136,78 +148,205 @@
 	let rafHandle: number | null = null;
 	let resizeObserver: ResizeObserver | null = null;
 
-	// The canvas itself is transparent (the white paper is CSS behind it), so
-	// destination-out erases back to plain paper.
+	function ensureWorld() {
+		const h = Math.round(WORLD_W / DRAW_RATIO_VALUE[ratio]);
+		if (world && worldH === h) return;
+		world = document.createElement('canvas');
+		world.width = WORLD_W;
+		world.height = h;
+		worldH = h;
+		wctx = world.getContext('2d', { willReadFrequently: true })!;
+		wctx.lineCap = 'round';
+		wctx.lineJoin = 'round';
+		worldRendered = false;
+	}
+
+	type WorldRect = { x0: number; y0: number; x1: number; y1: number };
+
+	// Copy (part of) the world onto the visible canvas, scaled to its size. The world is
+	// transparent where nothing is drawn (the white paper and trace images are CSS behind),
+	// so the target area is cleared first.
+	function present(rect?: WorldRect) {
+		if (!ctx || !world || !canvasEl || canvasEl.width === 0 || canvasEl.height === 0) return;
+		const bw = canvasEl.width;
+		const bh = canvasEl.height;
+		const sx = bw / WORLD_W;
+		const sy = bh / worldH;
+		let dx0 = 0;
+		let dy0 = 0;
+		let dx1 = bw;
+		let dy1 = bh;
+		if (rect) {
+			dx0 = Math.max(0, Math.floor(rect.x0 * sx) - 2);
+			dy0 = Math.max(0, Math.floor(rect.y0 * sy) - 2);
+			dx1 = Math.min(bw, Math.ceil(rect.x1 * sx) + 2);
+			dy1 = Math.min(bh, Math.ceil(rect.y1 * sy) + 2);
+			if (dx1 <= dx0 || dy1 <= dy0) return;
+		}
+		ctx.clearRect(dx0, dy0, dx1 - dx0, dy1 - dy0);
+		ctx.drawImage(world, dx0 / sx, dy0 / sy, (dx1 - dx0) / sx, (dy1 - dy0) / sy, dx0, dy0, dx1 - dx0, dy1 - dy0);
+	}
+
+	// Strokes are drawn into the world immediately but shown at most once per frame.
+	let dirty: WorldRect | null = null;
+	let presentRaf: number | null = null;
+	function markDirty(rect: WorldRect) {
+		dirty = dirty
+			? {
+					x0: Math.min(dirty.x0, rect.x0),
+					y0: Math.min(dirty.y0, rect.y0),
+					x1: Math.max(dirty.x1, rect.x1),
+					y1: Math.max(dirty.y1, rect.y1)
+				}
+			: rect;
+		if (presentRaf !== null) return;
+		presentRaf = requestAnimationFrame(() => {
+			presentRaf = null;
+			const r = dirty;
+			dirty = null;
+			if (r) present(r);
+		});
+	}
+
+	let batching = false; // true while redrawAll replays: it shows the result once at the end
+
+	// The world is transparent where nothing is drawn, so destination-out erases back to plain paper.
 	function drawDot(point: IPoint, stroke: Pick<IStroke, 'color' | 'width' | 'erase'>) {
-		ctx.globalCompositeOperation = stroke.erase ? 'destination-out' : 'source-over';
-		ctx.beginPath();
-		ctx.fillStyle = stroke.color;
-		ctx.arc(point.x, point.y, toPixelWidth(stroke.width) / 2, 0, Math.PI * 2);
-		ctx.fill();
+		ensureWorld();
+		const c = wctx!;
+		const radius = toPixelWidth(stroke.width) / 2;
+		c.globalCompositeOperation = stroke.erase ? 'destination-out' : 'source-over';
+		c.beginPath();
+		c.fillStyle = stroke.color;
+		c.arc(point.x, point.y, radius, 0, Math.PI * 2);
+		c.fill();
+		if (!batching) {
+			markDirty({ x0: point.x - radius, y0: point.y - radius, x1: point.x + radius, y1: point.y + radius });
+		}
 	}
 
 	function drawSegment(from: IPoint, to: IPoint, stroke: Pick<IStroke, 'color' | 'width' | 'erase'>) {
-		ctx.globalCompositeOperation = stroke.erase ? 'destination-out' : 'source-over';
-		ctx.beginPath();
-		ctx.strokeStyle = stroke.color;
-		ctx.lineWidth = toPixelWidth(stroke.width);
-		ctx.moveTo(from.x, from.y);
-		ctx.lineTo(to.x, to.y);
-		ctx.stroke();
+		ensureWorld();
+		const c = wctx!;
+		const lineWidth = toPixelWidth(stroke.width);
+		c.globalCompositeOperation = stroke.erase ? 'destination-out' : 'source-over';
+		c.beginPath();
+		c.strokeStyle = stroke.color;
+		c.lineWidth = lineWidth;
+		c.moveTo(from.x, from.y);
+		c.lineTo(to.x, to.y);
+		c.stroke();
+		if (!batching) {
+			const pad = lineWidth / 2;
+			markDirty({
+				x0: Math.min(from.x, to.x) - pad,
+				y0: Math.min(from.y, to.y) - pad,
+				x1: Math.max(from.x, to.x) + pad,
+				y1: Math.max(from.y, to.y) + pad
+			});
+		}
 	}
 
-	// Max per-channel difference (0-255) from the clicked pixel that still
-	// counts as "the same area". Loose enough to swallow anti-aliased edges.
-	const FILL_TOLERANCE = 80;
+	// Max per-channel difference (0-255), as seen over white paper, from the clicked
+	// pixel that still counts as "the same area".
+	const FILL_TOLERANCE = 64;
+	// Lines this close (in world pixels) to each other count as touching while the fill spreads,
+	// so a hairline gap in an outline doesn't let the colour run out over the whole paper.
+	const GAP_CLOSE = 2;
 
 	function hexToRgb(hex: string): [number, number, number] {
 		const value = parseInt(hex.replace('#', '').slice(0, 6), 16);
 		return [(value >> 16) & 255, (value >> 8) & 255, value & 255];
 	}
 
-	// Scanline flood fill. Pixels are compared as if composited over the white
-	// paper, so transparent canvas, erased areas and white ink all count as
-	// "paper" — the way they look on screen.
-	function applyFill(pixel: IPoint, fillColor: string) {
-		const width = canvasEl.width;
-		const height = canvasEl.height;
-		const scale = width / canvasEl.getBoundingClientRect().width;
-		const startX = Math.floor(pixel.x * scale);
-		const startY = Math.floor(pixel.y * scale);
-		if (startX < 0 || startY < 0 || startX >= width || startY >= height) return;
+	// dst[i] = 1 iff every src pixel within `r` along the axis is 1 (erode) — or, with
+	// `grow`, iff ANY of them is 1 (dilate). `step`/`len`/`lines`/`lineStep` describe the axis.
+	function slide(
+		src: Uint8Array,
+		dst: Uint8Array,
+		len: number,
+		lines: number,
+		step: number,
+		lineStep: number,
+		r: number,
+		grow: boolean
+	) {
+		for (let line = 0; line < lines; line++) {
+			const base = line * lineStep;
+			// count of pixels that "decide" the answer inside the window: zeros when eroding, ones when dilating
+			const decisive = grow ? 1 : 0;
+			let count = 0;
+			for (let k = 0; k <= Math.min(r, len - 1); k++) if (src[base + k * step] === decisive) count++;
+			for (let x = 0; x < len; x++) {
+				dst[base + x * step] = grow ? (count > 0 ? 1 : 0) : count === 0 ? 1 : 0;
+				const add = x + r + 1;
+				const drop = x - r;
+				if (add < len && src[base + add * step] === decisive) count++;
+				if (drop >= 0 && src[base + drop * step] === decisive) count--;
+			}
+		}
+	}
 
-		const image = ctx.getImageData(0, 0, width, height);
+	// Scanline flood fill on the world canvas. Pixels are compared as if composited over the
+	// white paper, so transparent canvas, erased areas and white ink all count as "paper".
+	//  1. Mark pixels close enough to the clicked colour as "open".
+	//  2. Shrink the open area by GAP_CLOSE so near-touching lines act as a wall, and spread
+	//     from the click through that shrunken area only.
+	//  3. Grow the result back by GAP_CLOSE (inside the open area) to meet the lines again.
+	//  4. Paint the colour UNDER the existing ink, so the soft edge of a line blends with the
+	//     new colour instead of being wiped out (thin outlines used to turn into dotted lines).
+	function applyFill(pixel: IPoint, fillColor: string) {
+		ensureWorld();
+		const w = WORLD_W;
+		const h = worldH;
+		const startX = Math.floor(pixel.x);
+		const startY = Math.floor(pixel.y);
+		if (startX < 0 || startY < 0 || startX >= w || startY >= h) return;
+
+		const image = wctx!.getImageData(0, 0, w, h);
 		const data = image.data;
 		const [fillR, fillG, fillB] = hexToRgb(fillColor);
+		const n = w * h;
 
-		const over = (i: number, channel: number) => {
-			const alpha = data[i + 3] / 255;
-			return data[i + channel] * alpha + 255 * (1 - alpha);
-		};
-		const seed = (startY * width + startX) * 4;
-		const seedR = over(seed, 0);
-		const seedG = over(seed, 1);
-		const seedB = over(seed, 2);
+		const seedIndex = startY * w + startX;
+		const si = seedIndex * 4;
+		const seedAlpha = data[si + 3] / 255;
+		const seedR = data[si] * seedAlpha + 255 * (1 - seedAlpha);
+		const seedG = data[si + 1] * seedAlpha + 255 * (1 - seedAlpha);
+		const seedB = data[si + 2] * seedAlpha + 255 * (1 - seedAlpha);
 		if (
 			Math.abs(seedR - fillR) < 8 &&
 			Math.abs(seedG - fillG) < 8 &&
 			Math.abs(seedB - fillB) < 8
 		) {
-			return;
+			return; // already that colour
 		}
 
-		const visited = new Uint8Array(width * height);
-		const canFill = (x: number, y: number) => {
-			const index = y * width + x;
-			if (visited[index]) return false;
-			const i = index * 4;
-			return (
-				Math.abs(over(i, 0) - seedR) <= FILL_TOLERANCE &&
-				Math.abs(over(i, 1) - seedG) <= FILL_TOLERANCE &&
-				Math.abs(over(i, 2) - seedB) <= FILL_TOLERANCE
-			);
-		};
+		const open = new Uint8Array(n);
+		for (let p = 0, i = 0; p < n; p++, i += 4) {
+			const a = data[i + 3] / 255;
+			const paper = 255 * (1 - a);
+			if (
+				Math.abs(data[i] * a + paper - seedR) <= FILL_TOLERANCE &&
+				Math.abs(data[i + 1] * a + paper - seedG) <= FILL_TOLERANCE &&
+				Math.abs(data[i + 2] * a + paper - seedB) <= FILL_TOLERANCE
+			) {
+				open[p] = 1;
+			}
+		}
 
+		const scratch = new Uint8Array(n);
+		const tight = new Uint8Array(n);
+		slide(open, scratch, w, h, 1, w, GAP_CLOSE, false); // rows
+		slide(scratch, tight, h, w, w, 1, GAP_CLOSE, false); // columns
+		// Clicked right beside a line? Then there is no "tight" area under the cursor: spread normally.
+		const mask = tight[seedIndex] ? tight : open;
+
+		const region = new Uint8Array(n);
+		const canFill = (x: number, y: number) => {
+			const index = y * w + x;
+			return mask[index] === 1 && region[index] === 0;
+		};
 		const stack: number[] = [startX, startY];
 		while (stack.length > 0) {
 			const y = stack.pop()!;
@@ -216,56 +355,96 @@
 			x++;
 			let spanUp = false;
 			let spanDown = false;
-			while (x < width && canFill(x, y)) {
-				const index = y * width + x;
-				visited[index] = 1;
-				const i = index * 4;
-				data[i] = fillR;
-				data[i + 1] = fillG;
-				data[i + 2] = fillB;
-				data[i + 3] = 255;
-
+			while (x < w && canFill(x, y)) {
+				region[y * w + x] = 1;
 				if (y > 0) {
-					const open = canFill(x, y - 1);
-					if (open && !spanUp) {
+					const free = canFill(x, y - 1);
+					if (free && !spanUp) {
 						stack.push(x, y - 1);
 						spanUp = true;
-					} else if (!open) {
+					} else if (!free) {
 						spanUp = false;
 					}
 				}
-				if (y < height - 1) {
-					const open = canFill(x, y + 1);
-					if (open && !spanDown) {
+				if (y < h - 1) {
+					const free = canFill(x, y + 1);
+					if (free && !spanDown) {
 						stack.push(x, y + 1);
 						spanDown = true;
-					} else if (!open) {
+					} else if (!free) {
 						spanDown = false;
 					}
 				}
 				x++;
 			}
 		}
-		ctx.putImageData(image, 0, 0);
+
+		let painted = region;
+		if (mask === tight) {
+			slide(region, scratch, w, h, 1, w, GAP_CLOSE, true);
+			painted = new Uint8Array(n);
+			slide(scratch, painted, h, w, w, 1, GAP_CLOSE, true);
+			for (let p = 0; p < n; p++) if (!open[p]) painted[p] = 0;
+		}
+
+		// The pixels touching the painted area: the soft edge of a line that is too dark to count
+		// as "open" but still part transparent would otherwise show a pale halo of bare paper.
+		const next = new Uint8Array(n);
+		slide(painted, scratch, w, h, 1, w, 1, true);
+		slide(scratch, next, h, w, w, 1, 1, true);
+
+		for (let p = 0, i = 0; p < n; p++, i += 4) {
+			const alpha = data[i + 3];
+			if (painted[p] && alpha === 255) {
+				data[i] = fillR;
+				data[i + 1] = fillG;
+				data[i + 2] = fillB;
+			} else if ((painted[p] || next[p]) && alpha > 0 && alpha < 255) {
+				// part-transparent = the soft edge of some ink: keep it, put the colour behind it
+				const k = alpha / 255;
+				data[i] = data[i] * k + fillR * (1 - k);
+				data[i + 1] = data[i + 1] * k + fillG * (1 - k);
+				data[i + 2] = data[i + 2] * k + fillB * (1 - k);
+				data[i + 3] = 255;
+			} else if (painted[p]) {
+				// nothing there at all (alpha 0)
+				data[i] = fillR;
+				data[i + 1] = fillG;
+				data[i + 2] = fillB;
+				data[i + 3] = 255;
+			}
+		}
+		wctx!.putImageData(image, 0, 0);
+		if (!batching) markDirty({ x0: 0, y0: 0, x1: w, y1: h });
 	}
 
 	function redrawAll() {
-		if (!ctx) return;
-		ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
-		for (const stroke of allStrokes) {
-			if (stroke.points.length === 0) continue;
-			if (stroke.fill) {
-				applyFill(toPixelPoint(stroke.points[0]), stroke.color);
-				continue;
+		ensureWorld();
+		const c = wctx!;
+		c.globalCompositeOperation = 'source-over';
+		c.clearRect(0, 0, WORLD_W, worldH);
+		batching = true;
+		try {
+			for (const stroke of allStrokes) {
+				if (stroke.points.length === 0) continue;
+				if (stroke.fill) {
+					applyFill(toPixelPoint(stroke.points[0]), stroke.color);
+					continue;
+				}
+				if (stroke.points.length === 1) {
+					drawDot(toPixelPoint(stroke.points[0]), stroke);
+					continue;
+				}
+				for (let i = 1; i < stroke.points.length; i++) {
+					drawSegment(toPixelPoint(stroke.points[i - 1]), toPixelPoint(stroke.points[i]), stroke);
+				}
 			}
-			if (stroke.points.length === 1) {
-				drawDot(toPixelPoint(stroke.points[0]), stroke);
-				continue;
-			}
-			for (let i = 1; i < stroke.points.length; i++) {
-				drawSegment(toPixelPoint(stroke.points[i - 1]), toPixelPoint(stroke.points[i]), stroke);
-			}
+		} finally {
+			batching = false;
 		}
+		worldRendered = true;
+		dirty = null;
+		present();
 	}
 
 	function fitPaper() {
@@ -286,13 +465,14 @@
 		const rect = canvasEl.getBoundingClientRect();
 		if (rect.width === 0 || rect.height === 0) return;
 		const dpr = window.devicePixelRatio || 1;
-		canvasEl.width = rect.width * dpr;
-		canvasEl.height = rect.height * dpr;
+		canvasEl.width = Math.round(rect.width * dpr);
+		canvasEl.height = Math.round(rect.height * dpr);
 		ctx = canvasEl.getContext('2d')!;
-		ctx.scale(dpr, dpr);
-		ctx.lineCap = 'round';
-		ctx.lineJoin = 'round';
-		redrawAll();
+		ctx.imageSmoothingEnabled = true;
+		ctx.imageSmoothingQuality = 'high';
+		// Only the scale changed: no need to replay anything (and so no chance of the fills coming out differently).
+		if (worldRendered) present();
+		else redrawAll();
 	}
 
 	// paperSize drives the paper element's CSS size; once Svelte has applied
@@ -318,20 +498,22 @@
 		redrawAll();
 	});
 
-	// PNG of the current drawing on the white paper. The canvas itself is
-	// transparent (the white is CSS behind it), so composite onto white first —
-	// otherwise the saved image would show erased areas and empty paper as
-	// black/transparent depending on the viewer.
+	// PNG of the current drawing on the white paper, always at the world's fixed size (so a
+	// saved or published picture doesn't depend on the screen it was exported from). The world
+	// is transparent (the white is CSS behind it), so composite onto white first — otherwise
+	// erased areas and empty paper would come out black/transparent depending on the viewer.
 	export function exportPng(): Promise<Blob | null> {
-		if (!canvasEl || canvasEl.width === 0 || canvasEl.height === 0) return Promise.resolve(null);
+		ensureWorld();
+		if (!world) return Promise.resolve(null);
+		if (!worldRendered) redrawAll();
 		const out = document.createElement('canvas');
-		out.width = canvasEl.width;
-		out.height = canvasEl.height;
+		out.width = world.width;
+		out.height = world.height;
 		const outCtx = out.getContext('2d');
 		if (!outCtx) return Promise.resolve(null);
 		outCtx.fillStyle = '#ffffff';
 		outCtx.fillRect(0, 0, out.width, out.height);
-		outCtx.drawImage(canvasEl, 0, 0);
+		outCtx.drawImage(world, 0, 0);
 		return new Promise((resolve) => out.toBlob((blob) => resolve(blob), 'image/png'));
 	}
 
@@ -387,7 +569,7 @@
 		allStrokes = [...allStrokes, fillStroke];
 		syncCanUndo();
 		applyFill(toPixelPoint(point), color);
-		DrawingService.strokeStart(code, fillStroke);
+		DrawingService.strokeStart(code, fillStroke, (seq) => noteAck(strokeId, seq));
 		DrawingService.strokeEnd(code, strokeId);
 	}
 
@@ -434,7 +616,7 @@
 		lastPoint.set(strokeId, pixelPoint);
 		drawDot(pixelPoint, stroke);
 
-		DrawingService.strokeStart(code, stroke);
+		DrawingService.strokeStart(code, stroke, (seq) => noteAck(strokeId, seq));
 	}
 
 	function handlePointerMove(e: PointerEvent) {
@@ -487,8 +669,43 @@
 		cursor.visible = false;
 	}
 
+	// The server numbers every stroke in the order it received them (stroke.seq). Fills and
+	// erasers depend on what was drawn before them, so every screen must replay in THAT order,
+	// not in the order things happened to reach this screen. Our own strokes that the server
+	// hasn't numbered yet always sit last (it will number them after anything it has sent us).
+	function noteAck(id: string, seq: number) {
+		for (let i = allStrokes.length - 1; i >= 0; i--) {
+			if (allStrokes[i].id === id) {
+				allStrokes[i].seq = seq;
+				return;
+			}
+		}
+	}
+
+	const orderSensitive = (s: IStroke) => !!s.fill || !!s.erase;
+
 	function onRemoteStrokeStart({ stroke }: { stroke: IStroke }) {
-		allStrokes = [...allStrokes, stroke];
+		if (allStrokes.some((s) => s.id === stroke.id)) return; // e.g. a snapshot raced the live event
+
+		let reordered = false;
+		if (stroke.seq === undefined) {
+			allStrokes = [...allStrokes, stroke];
+		} else {
+			let at = allStrokes.length;
+			while (at > 0 && allStrokes[at - 1].seq === undefined) at--;
+			const after = allStrokes.slice(at); // our unacknowledged strokes: the server will put them after this one
+			allStrokes = [...allStrokes.slice(0, at), stroke, ...after];
+			reordered = after.length > 0 && (orderSensitive(stroke) || after.some(orderSensitive));
+		}
+
+		if (reordered) {
+			// What is on screen has these in the wrong order, and a fill/eraser would come out
+			// differently: replay everything in the server's order.
+			redrawAll();
+			const last = stroke.points[stroke.points.length - 1];
+			if (!stroke.fill && last) lastPoint.set(stroke.id, toPixelPoint(last));
+			return;
+		}
 		if (stroke.fill) {
 			applyFill(toPixelPoint(stroke.points[0]), stroke.color);
 			return;
@@ -519,7 +736,12 @@
 		activeStroke = null;
 		pendingPoints = [];
 		syncCanUndo();
-		ctx?.clearRect(0, 0, canvasEl.width, canvasEl.height);
+		if (wctx) {
+			wctx.globalCompositeOperation = 'source-over';
+			wctx.clearRect(0, 0, WORLD_W, worldH);
+		}
+		dirty = null;
+		present();
 	}
 
 	// Someone's undo removed one of their strokes. Ink can't be un-drawn on
@@ -535,6 +757,67 @@
 		}
 		syncCanUndo();
 		redrawAll();
+	}
+
+	// ── Staying in step with the server ──────────────────────────────────────
+	// Every few seconds the server sends a fingerprint of the room's strokes (their order, and how
+	// many points each other player's strokes have). If ours differs — an event never arrived, the
+	// order drifted — fetch the room again instead of silently showing a different picture.
+	function fnv1a(text: string): string {
+		let h = 0x811c9dc5;
+		for (let i = 0; i < text.length; i++) {
+			h ^= text.charCodeAt(i);
+			h = Math.imul(h, 0x01000193);
+		}
+		return (h >>> 0).toString(16);
+	}
+
+	interface SyncMessage {
+		droppedUpTo: number;
+		lastSeq: number;
+		ids: string;
+		byPlayer: Record<string, string>;
+	}
+
+	let resyncing = false;
+	let lastResyncAt = 0;
+
+	function matchesServer(msg: SyncMessage): boolean {
+		const mine = allStrokes.filter((s) => s.seq !== undefined && s.seq > msg.droppedUpTo && s.seq <= msg.lastSeq);
+		if (fnv1a(mine.map((s) => `${s.seq}:${s.id}`).join(',')) !== msg.ids) return false;
+		// Other players' strokes may still be growing; ours are authoritative on our own screen.
+		for (const [playerId, hash] of Object.entries(msg.byPlayer)) {
+			if (playerId === selfId) continue;
+			const theirs = mine.filter((s) => s.playerId === playerId).map((s) => `${s.id}:${s.points.length}`);
+			if (fnv1a(theirs.join(',')) !== hash) return false;
+		}
+		return true;
+	}
+
+	function onSync(msg: SyncMessage) {
+		if (resyncing || activeStrokeId) return; // never yank the canvas from under a stroke in progress
+		if (matchesServer(msg)) return;
+		if (Date.now() - lastResyncAt < 30_000) return; // don't thrash if something keeps differing
+		void resyncStrokes();
+	}
+
+	async function resyncStrokes() {
+		resyncing = true;
+		lastResyncAt = Date.now();
+		try {
+			const res = await DrawingService.joinRoom(code);
+			if (!res.ok) return;
+			console.warn('[draw] strokes differed from the server — re-synced');
+			allStrokes = [...(res.strokes ?? [])];
+			lastPoint.clear();
+			activeStrokeId = null;
+			activeStroke = null;
+			pendingPoints = [];
+			syncCanUndo();
+			redrawAll();
+		} finally {
+			resyncing = false;
+		}
 	}
 
 	// ── Trace-image layers: move / resize the selected one ───────────────────
@@ -732,18 +1015,21 @@
 		socket.on('draw:stroke:points', onRemoteStrokePoints);
 		socket.on('draw:cleared', onCleared);
 		socket.on('draw:undone', onUndone);
+		socket.on('draw:sync', onSync);
 
 		return () => {
 			socket.off('draw:stroke:start', onRemoteStrokeStart);
 			socket.off('draw:stroke:points', onRemoteStrokePoints);
 			socket.off('draw:cleared', onCleared);
 			socket.off('draw:undone', onUndone);
+			socket.off('draw:sync', onSync);
 		};
 	});
 
 	onDestroy(() => {
 		resizeObserver?.disconnect();
 		if (rafHandle !== null) cancelAnimationFrame(rafHandle);
+		if (presentRaf !== null) cancelAnimationFrame(presentRaf);
 	});
 </script>
 

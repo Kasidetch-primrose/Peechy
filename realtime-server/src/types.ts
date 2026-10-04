@@ -109,4 +109,7 @@ export interface Stroke {
 	erase?: boolean;
 	fill?: boolean;
 	points: Point[];
+	// Position in the room's order, assigned by the server when the stroke arrives. Fills and
+	// erasers depend on what was drawn before them, so every client must replay in THIS order.
+	seq?: number;
 }

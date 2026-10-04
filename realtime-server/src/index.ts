@@ -165,14 +165,19 @@ io.on('connection', (socket) => {
 	// Only sockets that actually joined a draw room may act on it.
 	const inDrawRoom = (code: string) => socket.rooms.has(`draw:${code}`);
 
-	socket.on('draw:stroke:start', ({ code, stroke }: { code: string; stroke: Stroke }) => {
-		if (!inDrawRoom(code)) return;
-		// Stamp the author from the socket — per-player undo relies on this
-		// being trustworthy, so never take playerId from the payload.
-		const stamped: Stroke = { ...stroke, playerId };
-		draw.startStroke(code, stamped);
-		socket.to(`draw:${code}`).emit('draw:stroke:start', { stroke: stamped });
-	});
+	socket.on(
+		'draw:stroke:start',
+		({ code, stroke }: { code: string; stroke: Stroke }, ack?: (res: { seq: number }) => void) => {
+			if (!inDrawRoom(code)) return;
+			// Stamp the author from the socket — per-player undo relies on this
+			// being trustworthy, so never take playerId from the payload.
+			const stamped: Stroke = { ...stroke, playerId };
+			const seq = draw.startStroke(code, stamped); // also sets stamped.seq, overriding anything the client sent
+			socket.to(`draw:${code}`).emit('draw:stroke:start', { stroke: stamped });
+			// The sender already drew it locally; it only needs to learn its place in the room's order.
+			if (typeof ack === 'function') ack({ seq });
+		}
+	);
 
 	socket.on(
 		'draw:stroke:points',
@@ -302,7 +307,7 @@ io.on('connection', (socket) => {
 	// Publishing to the gallery is a room vote too (see draw.ts).
 	socket.on('draw:publish:request', async ({ code, meta }: { code: string; meta: unknown }) => {
 		if (!inDrawRoom(code)) return;
-		await draw.requestPublish(io, code, playerId, meta);
+		await draw.requestPublish(io, code, playerId, socket.id, meta);
 	});
 
 	socket.on('draw:publish:respond', async ({ code, approve }: { code: string; approve: boolean }) => {
@@ -344,6 +349,15 @@ io.on('connection', (socket) => {
 		}
 	});
 });
+
+// Heartbeat: every few seconds tell each occupied drawing room what its stroke list should
+// look like. A client whose own list differs (a missed event, a bug) re-syncs by itself.
+setInterval(() => {
+	for (const code of draw.activeDrawRoomCodes()) {
+		const occupants = io.sockets.adapter.rooms.get(`draw:${code}`);
+		if (occupants && occupants.size > 0) io.to(`draw:${code}`).emit('draw:sync', draw.syncSnapshot(code));
+	}
+}, 8_000);
 
 httpServer.listen(PORT, () => {
 	console.log(`[peechy-realtime] listening on :${PORT}`);

@@ -43,9 +43,12 @@ export interface IStroke {
 	// punch through earlier ink instead of adding colour.
 	erase?: boolean;
 	// Bucket fill: a single point + colour. Every client re-runs the flood
-	// fill on its own canvas at that point in the stroke order.
+	// fill, on the same fixed-size drawing surface, at that point in the stroke order.
 	fill?: boolean;
 	points: IPoint[];
+	// Position in the room's order, assigned by the server. Undefined only for this
+	// player's own strokes that the server hasn't acknowledged yet.
+	seq?: number;
 }
 
 export type DrawTool = 'pen' | 'eraser' | 'bucket';

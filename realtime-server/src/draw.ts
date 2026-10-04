@@ -48,6 +48,8 @@ export async function createRoom(
 	// freeing the code for reuse) their leftover entries would otherwise leak that
 	// old room's strokes/reference images into this brand new one.
 	roomStrokes.set(code, []);
+	roomSeq.delete(code);
+	roomDroppedUpTo.delete(code);
 	roomReferences.delete(code);
 	roomPaperRatio.delete(code);
 	refControl.delete(code);
@@ -87,10 +89,62 @@ export async function leaveRoom(io: Server, code: string, playerId: string): Pro
 	await releaseAllReferences(io, code, playerId);
 }
 
-export function startStroke(code: string, stroke: Stroke): void {
+// Per-room stroke numbering. The server is the only place that decides the order of
+// strokes drawn at the same moment by different players; clients replay in this order.
+const roomSeq = new Map<string, number>();
+const roomDroppedUpTo = new Map<string, number>(); // highest seq pushed out by the size cap
+
+/** Stores the stroke, numbering it. Returns the number (also written to stroke.seq). */
+export function startStroke(code: string, stroke: Stroke): number {
 	const strokes = strokesFor(code);
+	const seq = (roomSeq.get(code) ?? 0) + 1;
+	roomSeq.set(code, seq);
+	stroke.seq = seq;
 	strokes.push(stroke);
-	if (strokes.length > MAX_STROKES_PER_ROOM) strokes.shift();
+	if (strokes.length > MAX_STROKES_PER_ROOM) {
+		const dropped = strokes.shift();
+		if (dropped?.seq !== undefined) roomDroppedUpTo.set(code, dropped.seq);
+	}
+	return seq;
+}
+
+// 32-bit FNV-1a. The web client has the same function, so both sides can compare a
+// short fingerprint of the stroke list instead of shipping the list.
+function fnv1a(text: string): string {
+	let h = 0x811c9dc5;
+	for (let i = 0; i < text.length; i++) {
+		h ^= text.charCodeAt(i);
+		h = Math.imul(h, 0x01000193);
+	}
+	return (h >>> 0).toString(16);
+}
+
+export interface SyncSnapshot {
+	droppedUpTo: number;
+	lastSeq: number;
+	ids: string; // fingerprint of "seq:id" for every stored stroke, in order
+	byPlayer: Record<string, string>; // per player: fingerprint of "id:pointCount" of their strokes
+}
+
+/** What every client should hold right now; sent as a heartbeat so a missed event heals itself. */
+export function syncSnapshot(code: string): SyncSnapshot {
+	const strokes = roomStrokes.get(code) ?? [];
+	const perPlayer = new Map<string, string[]>();
+	for (const s of strokes) {
+		const list = perPlayer.get(s.playerId) ?? [];
+		list.push(`${s.id}:${s.points.length}`);
+		perPlayer.set(s.playerId, list);
+	}
+	return {
+		droppedUpTo: roomDroppedUpTo.get(code) ?? 0,
+		lastSeq: roomSeq.get(code) ?? 0,
+		ids: fnv1a(strokes.map((s) => `${s.seq}:${s.id}`).join(',')),
+		byPlayer: Object.fromEntries([...perPlayer].map(([pid, list]) => [pid, fnv1a(list.join(','))]))
+	};
+}
+
+export function activeDrawRoomCodes(): string[] {
+	return [...roomStrokes.keys()];
 }
 
 export function appendPoints(code: string, strokeId: string, playerId: string, points: Point[]): void {
@@ -260,6 +314,7 @@ export interface PublishMeta {
 
 interface PublishVote {
 	initiatorId: string;
+	initiatorSocketId: string; // the exact tab that asked: only it may redeem the ticket
 	meta: PublishMeta;
 	names: Map<string, string>;
 	votes: Map<string, boolean | null>;
@@ -332,7 +387,10 @@ async function finishPublishVote(
 				snapshot,
 				timer: setTimeout(() => publishTickets.delete(ticket), PUBLISH_TICKET_MS)
 			});
-			io.to(`player:${vote.initiatorId}`).emit('draw:publish:approved', { ticket });
+			// Deliver to the tab that asked, NOT to every tab of that player: another tab of
+			// the same account (e.g. an old room left open) would also upload, with ITS canvas,
+			// and could win the race for this one-time ticket — publishing the wrong picture.
+			void sendPublishTicket(io, code, vote, ticket);
 		}
 	}
 	io.to(`draw:${code}`).emit('draw:publish:result', {
@@ -343,16 +401,37 @@ async function finishPublishVote(
 	});
 }
 
+async function sendPublishTicket(
+	io: Server,
+	code: string,
+	vote: PublishVote,
+	ticket: string
+): Promise<void> {
+	const payload = { code, ticket };
+	const asker = io.sockets.sockets.get(vote.initiatorSocketId);
+	if (asker?.rooms.has(`draw:${code}`)) {
+		asker.emit('draw:publish:approved', payload);
+		return;
+	}
+	// The asking tab reconnected mid-vote (new socket id): fall back to that player's
+	// tabs that are in THIS room.
+	const inRoom = await io.in(`draw:${code}`).fetchSockets();
+	for (const s of inRoom) {
+		if (String(s.handshake.auth.playerId ?? '') === vote.initiatorId) s.emit('draw:publish:approved', payload);
+	}
+}
+
 const publishAllYes = (vote: PublishVote) => [...vote.votes.values()].every((v) => v === true);
 
 export async function requestPublish(
 	io: Server,
 	code: string,
 	playerId: string,
+	socketId: string,
 	metaInput: unknown
 ): Promise<void> {
 	const deny = (reason: 'busy' | 'cooldown' | 'invalid', retryAt?: number): void => {
-		io.to(`player:${playerId}`).emit('draw:publish:denied', { reason, retryAt });
+		io.to(socketId).emit('draw:publish:denied', { reason, retryAt });
 	};
 	const meta = cleanMeta(metaInput);
 	if (!meta) return deny('invalid');
@@ -366,6 +445,7 @@ export async function requestPublish(
 
 	const vote: PublishVote = {
 		initiatorId: playerId,
+		initiatorSocketId: socketId,
 		meta,
 		names: new Map(online.map((p) => [p.id, p.name])),
 		votes: new Map(online.map((p) => [p.id, p.id === playerId ? true : null])),

@@ -43,8 +43,11 @@ export default class DrawingService {
 		MultiplayerService.getSocket().emit('draw:room:leave', { code });
 	}
 
-	static strokeStart(code: string, stroke: IStroke): void {
-		MultiplayerService.getSocket().emit('draw:stroke:start', { code, stroke });
+	// onAck receives the stroke's place (seq) in the room's order once the server has numbered it.
+	static strokeStart(code: string, stroke: IStroke, onAck?: (seq: number) => void): void {
+		MultiplayerService.getSocket().emit('draw:stroke:start', { code, stroke }, (res?: { seq?: number }) => {
+			if (typeof res?.seq === 'number') onAck?.(res.seq);
+		});
 	}
 
 	static strokePoints(code: string, strokeId: string, points: IPoint[]): void {

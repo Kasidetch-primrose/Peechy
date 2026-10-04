@@ -36,7 +36,7 @@ interface DrawingState {
 	publishNotice: IPublishNotice | null;
 	// One-time ticket the server gives ONLY the player who asked, once everyone agreed;
 	// the room page redeems it by uploading the PNG.
-	publishTicket: string | null;
+	publishTicket: { code: string; ticket: string } | null;
 	// Trace layers this player may see, bottom → top: every public one plus their own
 	// private ones (the server never sends anyone else's private layers).
 	references: IDrawReference[];
@@ -209,8 +209,8 @@ function _bindEvents() {
 		drawingStore.update((s) => ({ ...s, publishVote: vote }));
 	});
 
-	socket.on('draw:publish:approved', ({ ticket }: { ticket: string }) => {
-		drawingStore.update((s) => ({ ...s, publishTicket: ticket }));
+	socket.on('draw:publish:approved', ({ code, ticket }: { code: string; ticket: string }) => {
+		drawingStore.update((s) => ({ ...s, publishTicket: { code, ticket } }));
 	});
 
 	socket.on(

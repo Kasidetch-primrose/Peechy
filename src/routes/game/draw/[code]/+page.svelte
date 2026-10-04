@@ -470,10 +470,12 @@
 
 	// Everyone agreed → redeem the ticket (only the requester receives one).
 	$effect(() => {
-		const ticket = $drawingStore.publishTicket;
-		if (!ticket) return;
+		const pending = $drawingStore.publishTicket;
+		if (!pending) return;
 		drawingStore.update((s) => ({ ...s, publishTicket: null }));
-		void uploadArtwork(ticket);
+		// A ticket belongs to one room's snapshot; this page must only upload ITS own canvas for it.
+		if (pending.code !== code) return;
+		void uploadArtwork(pending.ticket);
 	});
 
 	async function uploadArtwork(ticket: string) {
