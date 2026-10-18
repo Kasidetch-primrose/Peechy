@@ -17,5 +17,6 @@
 </svelte:head>
 
 <div class="flex flex-1 justify-center py-3xl">
-	<span class="h-8 w-8 animate-spin rounded-full border-4 border-primary-200 border-t-primary-500"></span>
+	<span class="h-8 w-8 animate-spin rounded-full border-4 border-primary-200 border-t-primary-500"
+	></span>
 </div>

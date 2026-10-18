@@ -2,11 +2,7 @@
 	import { onMount } from 'svelte';
 	import { slide } from 'svelte/transition';
 	import AnnouncementService from '$lib/data/services/announcement';
-	import {
-		DEFAULT_ANNOUNCEMENT_SETTINGS,
-		type IAnnouncementSettings,
-		type IPublicAnnouncement
-	} from '$lib/data/interface/announcement';
+	import type { IPublicAnnouncement } from '$lib/data/interface/announcement';
 	import AnnouncementBanner from './AnnouncementBanner.svelte';
 	import AnnouncementPopup from './AnnouncementPopup.svelte';
 
@@ -17,17 +13,15 @@
 
 	let announcements = $state<IPublicAnnouncement[]>([]);
 	let dismissed = $state<string[]>([]);
-	let settings = $state<IAnnouncementSettings>(DEFAULT_ANNOUNCEMENT_SETTINGS);
-	// This visit's popups, fixed on load: at most maxPopups, shown one after another.
-	let popupQueue = $state<IPublicAnnouncement[]>([]);
 
-	// Newest first; closing a banner lets the next one in line take its place.
 	const banners = $derived(
-		announcements
-			.filter((a) => a.display !== 'popup' && !dismissed.includes(versionOf(a, 'banner')))
-			.slice(0, settings.maxBanners)
+		announcements.filter(
+			(a) => a.display !== 'popup' && !dismissed.includes(versionOf(a, 'banner'))
+		)
 	);
-	const popup = $derived(popupQueue.find((a) => !dismissed.includes(versionOf(a, 'popup'))));
+	const popup = $derived(
+		announcements.find((a) => a.display !== 'banner' && !dismissed.includes(versionOf(a, 'popup')))
+	);
 
 	function readDismissed(): string[] {
 		try {
@@ -39,7 +33,9 @@
 	}
 
 	function dismiss(a: IPublicAnnouncement, kind: 'banner' | 'popup') {
-		const live = new Set(announcements.flatMap((x) => [versionOf(x, 'banner'), versionOf(x, 'popup')]));
+		const live = new Set(
+			announcements.flatMap((x) => [versionOf(x, 'banner'), versionOf(x, 'popup')])
+		);
 		// Keep only versions that are still live so the list doesn't grow forever.
 		dismissed = [...dismissed.filter((v) => live.has(v)), versionOf(a, kind)];
 		try {
@@ -53,13 +49,7 @@
 		dismissed = readDismissed();
 		try {
 			const res = await AnnouncementService.getActive();
-			if (res.status === 'success' && res.docs) {
-				announcements = res.docs;
-				if (res.settings) settings = res.settings;
-				popupQueue = res.docs
-					.filter((a) => a.display !== 'banner' && !dismissed.includes(versionOf(a, 'popup')))
-					.slice(0, settings.maxPopups);
-			}
+			if (res.status === 'success' && res.docs) announcements = res.docs;
 		} catch {
 			// announcements are optional — the page works without them
 		}

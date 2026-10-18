@@ -46,14 +46,17 @@
 				class="flex h-16 w-16 items-center justify-center rounded-2xl bg-white text-3xl shadow-md"
 				aria-hidden="true">{tone.icon}</span
 			>
-			<span class="mt-3 rounded-full px-3 py-0.5 text-xs font-medium {tone.chip}">{tone.label}</span>
+			<span class="mt-3 rounded-full px-3 py-0.5 text-xs font-medium {tone.chip}">{tone.label}</span
+			>
 			<h2 id="announcement-popup-title" class="mt-2 text-xl font-bold break-words text-gray-900">
 				{announcement.title}
 			</h2>
 		</div>
 
 		<div class="px-6 py-5">
-			<p class="max-h-[40vh] overflow-y-auto text-sm leading-relaxed break-words whitespace-pre-line text-gray-700">
+			<p
+				class="max-h-[40vh] overflow-y-auto text-sm leading-relaxed break-words whitespace-pre-line text-gray-700"
+			>
 				{announcement.message}
 			</p>
 

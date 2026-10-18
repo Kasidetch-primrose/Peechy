@@ -29,7 +29,9 @@
 
 	<div class="min-w-0 flex-1">
 		<p class="font-semibold break-words text-gray-900">{announcement.title}</p>
-		<p class="mt-0.5 text-sm break-words whitespace-pre-line text-gray-700">{announcement.message}</p>
+		<p class="mt-0.5 text-sm break-words whitespace-pre-line text-gray-700">
+			{announcement.message}
+		</p>
 	</div>
 
 	{#if announcement.linkUrl}
@@ -51,7 +53,14 @@
 			aria-label="ปิดประกาศ"
 			class="absolute top-2 right-2 flex h-8 w-8 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-white/80 hover:text-gray-700"
 		>
-			<svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+			<svg
+				class="h-4 w-4"
+				viewBox="0 0 24 24"
+				fill="none"
+				stroke="currentColor"
+				stroke-width="2.5"
+				aria-hidden="true"
+			>
 				<path stroke-linecap="round" d="M6 6l12 12M18 6L6 18" />
 			</svg>
 		</button>

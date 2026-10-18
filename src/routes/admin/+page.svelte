@@ -6,13 +6,18 @@
 	import { authUserStore } from '$lib/data/stores/authUser';
 	import {
 		ANNOUNCEMENT_DISPLAYS,
-		ANNOUNCEMENT_LIMIT_MAX,
 		ANNOUNCEMENT_TONES,
-		DEFAULT_ANNOUNCEMENT_SETTINGS,
 		type IAnnouncement,
-		type IAnnouncementInput,
-		type IAnnouncementSettings
+		type IAnnouncementInput
 	} from '$lib/data/interface/announcement';
+	import SettingsService from '$lib/data/services/settings';
+	import {
+		DEFAULT_HOME_SETTINGS,
+		HOME_LIMIT_MAX,
+		HOME_SECTIONS,
+		type IHomeSectionLimit,
+		type IHomeSettings
+	} from '$lib/data/interface/settings';
 	import AnnouncementBanner from '$lib/components/announcement/AnnouncementBanner.svelte';
 	import AnnouncementPopup from '$lib/components/announcement/AnnouncementPopup.svelte';
 	import { DISPLAY_LABELS, TONE_STYLES } from '$lib/components/announcement/tones';
@@ -69,54 +74,65 @@
 		return { label: 'กำลังแสดง', class: 'bg-emerald-100 text-emerald-800' };
 	}
 
-	// Live announcements past the limit wait their turn (the home page shows newest edits first).
-	const overLimit = $derived.by(() => {
-		const live = items
-			.filter((a) => statusOf(a).label === 'กำลังแสดง')
-			.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-		const banner = live.filter((a) => a.display !== 'popup').slice(settings.maxBanners);
-		const popup = live.filter((a) => a.display !== 'banner').slice(settings.maxPopups);
-		return { banner: new Set(banner.map((a) => a.id)), popup: new Set(popup.map((a) => a.id)) };
+	// ── Home page card counts ──
+	const clone = (h: IHomeSettings): IHomeSettings => ({
+		games: { ...h.games },
+		artworks: { ...h.artworks }
 	});
+	let home = $state<IHomeSettings>(clone(DEFAULT_HOME_SETTINGS));
+	let homeDraft = $state<IHomeSettings>(clone(DEFAULT_HOME_SETTINGS));
+	let savingHome = $state(false);
+	const homeDirty = $derived(JSON.stringify(home) !== JSON.stringify(homeDraft));
 
-	// ── Display limits ──
-	let settings = $state<IAnnouncementSettings>({ ...DEFAULT_ANNOUNCEMENT_SETTINGS });
-	let settingsDraft = $state<IAnnouncementSettings>({ ...DEFAULT_ANNOUNCEMENT_SETTINGS });
-	let savingSettings = $state(false);
-	const settingsDirty = $derived(
-		settingsDraft.maxBanners !== settings.maxBanners || settingsDraft.maxPopups !== settings.maxPopups
-	);
+	const SECTION_LABELS: Record<(typeof HOME_SECTIONS)[number], { title: string; icon: string }> = {
+		games: { title: 'เปิดป้ายทายภาพ', icon: '🖼️' },
+		artworks: { title: 'วาดรูปด้วยกัน', icon: '🎨' }
+	};
+	const DEVICES: { key: keyof IHomeSectionLimit; label: string; perRow: number }[] = [
+		{ key: 'desktop', label: '💻 คอม', perRow: 3 },
+		{ key: 'mobile', label: '📱 มือถือ / แท็บเล็ต', perRow: 2 }
+	];
 
-	async function loadSettings() {
+	/** "2 แถว", "2 แถว + 1", or "ซ่อน" for 0. */
+	function rowsLabel(count: number, perRow: number) {
+		if (count === 0) return 'ซ่อน';
+		const full = Math.floor(count / perRow);
+		const rest = count % perRow;
+		if (full === 0) return `${rest} ใบ`;
+		return rest ? `${full} แถว + ${rest}` : `${full} แถว`;
+	}
+
+	async function loadHome() {
 		try {
-			const res = await AnnouncementService.getSettings();
+			const res = await SettingsService.getHome();
 			if (res.status === 'success' && res.doc) {
-				settings = res.doc;
-				settingsDraft = { ...res.doc };
+				home = clone(res.doc);
+				homeDraft = clone(res.doc);
 			}
 		} catch {
 			// keep defaults; saving still works
 		}
 	}
 
-	async function saveSettings() {
-		savingSettings = true;
+	async function saveHome() {
+		savingHome = true;
 		try {
-			const res = await AnnouncementService.saveSettings(settingsDraft);
+			const res = await SettingsService.saveHome(homeDraft);
 			if (res.status === 'success' && res.doc) {
-				settings = res.doc;
-				settingsDraft = { ...res.doc };
-				flash('บันทึกการตั้งค่าแล้ว');
+				home = clone(res.doc);
+				homeDraft = clone(res.doc);
+				flash('บันทึกการตั้งค่าหน้าหลักแล้ว');
 			} else flash(res.error ?? 'บันทึกไม่สำเร็จ');
 		} catch {
 			flash('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้');
 		} finally {
-			savingSettings = false;
+			savingHome = false;
 		}
 	}
 
-	function step(field: keyof IAnnouncementSettings, delta: number) {
-		settingsDraft[field] = Math.min(ANNOUNCEMENT_LIMIT_MAX, Math.max(0, settingsDraft[field] + delta));
+	function step(section: keyof IHomeSettings, device: keyof IHomeSectionLimit, delta: number) {
+		const next = homeDraft[section][device] + delta;
+		homeDraft[section][device] = Math.min(HOME_LIMIT_MAX, Math.max(0, next));
 	}
 
 	function flash(msg: string) {
@@ -236,7 +252,7 @@
 			return;
 		}
 		load();
-		loadSettings();
+		loadHome();
 	});
 
 	const inputClass =
@@ -245,31 +261,110 @@
 </script>
 
 <svelte:head>
-	<title>จัดการประกาศ | Peechy CMS</title>
+	<title>Peechy CMS</title>
 	<meta name="robots" content="noindex, nofollow" />
 </svelte:head>
 
 <main class="mx-auto w-full max-w-6xl px-lg py-xl">
 	{#if access === 'loading'}
 		<div class="flex justify-center py-3xl">
-			<span class="h-8 w-8 animate-spin rounded-full border-4 border-primary-200 border-t-primary-500"></span>
+			<span
+				class="h-8 w-8 animate-spin rounded-full border-4 border-primary-200 border-t-primary-500"
+			></span>
 		</div>
 	{:else if access === 'forbidden'}
-		<div class="mx-auto flex max-w-[26rem] flex-col items-center rounded-3xl bg-white/90 p-xl text-center shadow-sm">
+		<div
+			class="mx-auto flex max-w-[26rem] flex-col items-center rounded-3xl bg-white/90 p-xl text-center shadow-sm"
+		>
 			<span class="text-5xl">🔒</span>
 			<h1 class="mt-md text-xl font-bold text-gray-900">ไม่มีสิทธิ์เข้าถึง</h1>
 			<p class="mt-1 text-sm text-gray-700">หน้านี้สำหรับผู้ดูแลระบบเท่านั้น</p>
-			<a href="/" class="mt-lg rounded-full bg-primary-500 px-lg py-sm text-sm font-medium text-white hover:bg-primary-400">
+			<a
+				href="/"
+				class="mt-lg rounded-full bg-primary-500 px-lg py-sm text-sm font-medium text-white hover:bg-primary-400"
+			>
 				กลับหน้าหลัก
 			</a>
 		</div>
 	{:else}
 		<!-- Header -->
+		<div class="mb-lg">
+			<p class="text-sm font-medium text-primary-600">Peechy CMS</p>
+			<h1 class="text-2xl font-bold text-gray-900">ระบบจัดการ</h1>
+		</div>
+
+		<!-- Home page card counts -->
+		<section class="mb-xl rounded-3xl bg-white/95 p-lg shadow-sm">
+			<div class="mb-md flex flex-wrap items-center justify-between gap-md">
+				<div>
+					<h2 class="text-lg font-semibold text-gray-900">จำนวนการ์ดบนหน้าหลัก</h2>
+					<p class="text-sm text-gray-700">
+						คอมแสดงแถวละ 3 ใบ มือถือ/แท็บเล็ตแถวละ 2 ใบ — ใส่ 0 เพื่อซ่อนทั้งส่วนบนจอขนาดนั้น
+					</p>
+				</div>
+				<button
+					type="button"
+					onclick={saveHome}
+					disabled={!homeDirty || savingHome}
+					class="rounded-full bg-primary-500 px-lg py-sm text-sm font-semibold text-white transition-colors hover:bg-primary-400 disabled:cursor-not-allowed disabled:opacity-50"
+				>
+					{savingHome ? 'กำลังบันทึก...' : 'บันทึกการตั้งค่า'}
+				</button>
+			</div>
+
+			<div class="grid gap-md md:grid-cols-2">
+				{#each HOME_SECTIONS as section}
+					<div class="rounded-2xl bg-gray-100/70 p-md">
+						<p class="mb-sm font-medium text-gray-900">
+							{SECTION_LABELS[section].icon}
+							{SECTION_LABELS[section].title}
+						</p>
+						<div class="flex flex-col gap-sm">
+							{#each DEVICES as device}
+								{@const value = homeDraft[section][device.key]}
+								<div
+									class="flex items-center justify-between gap-md rounded-xl bg-white px-md py-sm"
+								>
+									<div class="min-w-0">
+										<p class="text-sm text-gray-900">{device.label}</p>
+										<p class="text-xs text-gray-400">{rowsLabel(value, device.perRow)}</p>
+									</div>
+									<div class="flex shrink-0 items-center gap-2">
+										<button
+											type="button"
+											aria-label="ลดจำนวน {SECTION_LABELS[section].title} บน{device.label}"
+											disabled={value <= 0}
+											onclick={() => step(section, device.key, -1)}
+											class="h-9 w-9 rounded-full border border-primary-300 bg-white text-lg font-semibold text-primary-600 hover:bg-primary-100 disabled:opacity-40"
+										>
+											−
+										</button>
+										<span class="w-8 text-center text-lg font-bold text-gray-900">{value}</span>
+										<button
+											type="button"
+											aria-label="เพิ่มจำนวน {SECTION_LABELS[section].title} บน{device.label}"
+											disabled={value >= HOME_LIMIT_MAX}
+											onclick={() => step(section, device.key, 1)}
+											class="h-9 w-9 rounded-full border border-primary-300 bg-white text-lg font-semibold text-primary-600 hover:bg-primary-100 disabled:opacity-40"
+										>
+											+
+										</button>
+									</div>
+								</div>
+							{/each}
+						</div>
+					</div>
+				{/each}
+			</div>
+		</section>
+
+		<!-- Announcements -->
 		<div class="mb-lg flex flex-wrap items-end justify-between gap-md">
 			<div>
-				<p class="text-sm font-medium text-primary-600">Peechy CMS</p>
-				<h1 class="text-2xl font-bold text-gray-900">จัดการประกาศ</h1>
-				<p class="mt-1 text-sm text-gray-700">ประกาศที่เปิดไว้จะแสดงบนหน้าหลัก เป็นแถบด้านบนหรือป๊อปอัปตอนเข้าเว็บ</p>
+				<h2 class="text-xl font-bold text-gray-900">ประกาศ</h2>
+				<p class="mt-1 text-sm text-gray-700">
+					ประกาศที่เปิดไว้จะแสดงบนหน้าหลัก เป็นแถบด้านบนหรือป๊อปอัปตอนเข้าเว็บ
+				</p>
 			</div>
 			{#if !formOpen}
 				<button
@@ -284,12 +379,19 @@
 
 		<!-- Editor -->
 		{#if formOpen}
-			<section class="mb-xl rounded-3xl bg-white/95 p-lg shadow-sm" transition:slide={{ duration: 220 }}>
+			<section
+				class="mb-xl rounded-3xl bg-white/95 p-lg shadow-sm"
+				transition:slide={{ duration: 220 }}
+			>
 				<div class="mb-md flex items-center justify-between gap-md">
 					<h2 class="text-lg font-semibold text-gray-900">
 						{editingId === null ? 'สร้างประกาศใหม่' : 'แก้ไขประกาศ'}
 					</h2>
-					<button type="button" onclick={closeForm} class="text-sm text-gray-400 hover:text-gray-700">ยกเลิก</button>
+					<button
+						type="button"
+						onclick={closeForm}
+						class="text-sm text-gray-400 hover:text-gray-700">ยกเลิก</button
+					>
 				</div>
 
 				<div class="grid gap-lg lg:grid-cols-2">
@@ -297,7 +399,13 @@
 					<div class="flex flex-col gap-md">
 						<div>
 							<label class={labelClass} for="ann-title">หัวข้อ</label>
-							<input id="ann-title" class={inputClass} maxlength="120" bind:value={form.title} placeholder="เช่น อัปเดตใหม่! โหมดวาดรูปด้วยกัน" />
+							<input
+								id="ann-title"
+								class={inputClass}
+								maxlength="120"
+								bind:value={form.title}
+								placeholder="เช่น อัปเดตใหม่! โหมดวาดรูปด้วยกัน"
+							/>
 						</div>
 						<div>
 							<label class={labelClass} for="ann-message">
@@ -340,7 +448,8 @@
 											? 'border-primary-500 bg-primary-100 font-semibold text-primary-600'
 											: 'border-gray-200 text-gray-700 hover:bg-gray-100'}"
 									>
-										{TONE_STYLES[t].icon} {TONE_STYLES[t].label}
+										{TONE_STYLES[t].icon}
+										{TONE_STYLES[t].label}
 									</button>
 								{/each}
 							</div>
@@ -357,7 +466,11 @@
 									placeholder="/games หรือ https://..."
 								/>
 								<p class="mt-1 text-xs text-gray-400">
-									ใส่ <button type="button" class="font-mono text-primary-600 underline" onclick={() => (form.linkUrl = '/profile/me')}>/profile/me</button> เพื่อพาผู้ใช้ไปหน้าโปรไฟล์ของตัวเอง
+									ใส่ <button
+										type="button"
+										class="font-mono text-primary-600 underline"
+										onclick={() => (form.linkUrl = '/profile/me')}>/profile/me</button
+									> เพื่อพาผู้ใช้ไปหน้าโปรไฟล์ของตัวเอง
 								</p>
 							</div>
 							<div>
@@ -398,7 +511,11 @@
 						</div>
 
 						<label class="flex cursor-pointer items-center gap-3 select-none">
-							<input type="checkbox" bind:checked={form.isActive} class="h-5 w-5 accent-primary-500" />
+							<input
+								type="checkbox"
+								bind:checked={form.isActive}
+								class="h-5 w-5 accent-primary-500"
+							/>
 							<span class="text-sm text-gray-900">เปิดใช้งานทันทีหลังบันทึก</span>
 						</label>
 
@@ -449,65 +566,14 @@
 							</button>
 						{/if}
 						<p class="text-xs leading-relaxed text-gray-700">
-							ป๊อปอัปจะเด้งครั้งเดียวต่อเครื่อง เมื่อผู้ใช้กดปิดจะไม่เด้งอีก — ถ้าแก้ไขข้อความแล้วบันทึก
-							จะเด้งให้เห็นใหม่อีกครั้ง (การกดเปิด/ปิดอย่างเดียวจะไม่ทำให้เด้งซ้ำ)
+							ป๊อปอัปจะเด้งครั้งเดียวต่อเครื่อง เมื่อผู้ใช้กดปิดจะไม่เด้งอีก —
+							ถ้าแก้ไขข้อความแล้วบันทึก จะเด้งให้เห็นใหม่อีกครั้ง
+							(การกดเปิด/ปิดอย่างเดียวจะไม่ทำให้เด้งซ้ำ)
 						</p>
 					</div>
 				</div>
 			</section>
 		{/if}
-
-		<!-- Display limits -->
-		{#snippet limitStepper(field: keyof IAnnouncementSettings, label: string, hint: string)}
-			<div class="flex items-center justify-between gap-md rounded-2xl bg-gray-100/70 p-md">
-				<div class="min-w-0">
-					<p class="text-sm font-medium text-gray-900">{label}</p>
-					<p class="text-xs text-gray-700">{hint}</p>
-				</div>
-				<div class="flex shrink-0 items-center gap-2">
-					<button
-						type="button"
-						aria-label="ลด {label}"
-						disabled={settingsDraft[field] <= 0}
-						onclick={() => step(field, -1)}
-						class="h-9 w-9 rounded-full border border-primary-300 bg-white text-lg font-semibold text-primary-600 hover:bg-primary-100 disabled:opacity-40"
-					>
-						−
-					</button>
-					<span class="w-8 text-center text-lg font-bold text-gray-900">{settingsDraft[field]}</span>
-					<button
-						type="button"
-						aria-label="เพิ่ม {label}"
-						disabled={settingsDraft[field] >= ANNOUNCEMENT_LIMIT_MAX}
-						onclick={() => step(field, 1)}
-						class="h-9 w-9 rounded-full border border-primary-300 bg-white text-lg font-semibold text-primary-600 hover:bg-primary-100 disabled:opacity-40"
-					>
-						+
-					</button>
-				</div>
-			</div>
-		{/snippet}
-
-		<section class="mb-lg rounded-3xl bg-white/95 p-lg shadow-sm">
-			<div class="mb-md flex flex-wrap items-center justify-between gap-md">
-				<div>
-					<h2 class="text-lg font-semibold text-gray-900">จำนวนที่แสดงบนหน้าหลัก</h2>
-					<p class="text-sm text-gray-700">ประกาศที่แก้ไขล่าสุดจะได้แสดงก่อน ส่วนที่เกินจะรอคิว (0 = ไม่แสดงเลย)</p>
-				</div>
-				<button
-					type="button"
-					onclick={saveSettings}
-					disabled={!settingsDirty || savingSettings}
-					class="rounded-full bg-primary-500 px-lg py-sm text-sm font-semibold text-white transition-colors hover:bg-primary-400 disabled:cursor-not-allowed disabled:opacity-50"
-				>
-					{savingSettings ? 'กำลังบันทึก...' : 'บันทึกการตั้งค่า'}
-				</button>
-			</div>
-			<div class="grid gap-md sm:grid-cols-2">
-				{@render limitStepper('maxBanners', 'แถบประกาศสูงสุด', 'จำนวนแถบที่แสดงพร้อมกัน')}
-				{@render limitStepper('maxPopups', 'ป๊อปอัปสูงสุด', 'จำนวนป๊อปอัปที่เด้งต่อการเข้าเว็บหนึ่งครั้ง')}
-			</div>
-		</section>
 
 		<!-- List -->
 		{#if loadError}
@@ -524,41 +590,32 @@
 				{#each items as a (a.id)}
 					{@const status = statusOf(a)}
 					<li
-						class="flex flex-col gap-md rounded-3xl bg-white/95 p-md shadow-sm sm:flex-row sm:items-center {editingId === a.id
+						class="flex flex-col gap-md rounded-3xl bg-white/95 p-md shadow-sm sm:flex-row sm:items-center {editingId ===
+						a.id
 							? 'ring-2 ring-primary-400'
 							: ''}"
 					>
-						<span class="hidden h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gray-100 text-2xl sm:flex">
+						<span
+							class="hidden h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gray-100 text-2xl sm:flex"
+						>
 							{TONE_STYLES[a.tone]?.icon ?? '📢'}
 						</span>
 						<div class="min-w-0 flex-1">
 							<div class="flex flex-wrap items-center gap-2">
-								<span class="rounded-full px-2.5 py-0.5 text-xs font-medium {status.class}">{status.label}</span>
+								<span class="rounded-full px-2.5 py-0.5 text-xs font-medium {status.class}"
+									>{status.label}</span
+								>
 								<span class="rounded-full bg-primary-50 px-2.5 py-0.5 text-xs text-primary-600">
 									{DISPLAY_LABELS[a.display] ?? a.display}
 								</span>
-								{#if overLimit.banner.has(a.id)}
-									<span
-										class="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs text-amber-800"
-										title="เกินจำนวนแถบสูงสุด — จะแสดงเมื่อผู้ใช้ปิดแถบที่อยู่ก่อนหน้า"
-									>
-										แถบ: รอคิว
-									</span>
-								{/if}
-								{#if overLimit.popup.has(a.id)}
-									<span
-										class="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs text-amber-800"
-										title="เกินจำนวนป๊อปอัปต่อการเข้าเว็บ — จะเด้งในการเข้าเว็บครั้งถัดไปหลังผู้ใช้ปิดอันก่อนหน้า"
-									>
-										ป๊อปอัป: รอคิว
-									</span>
-								{/if}
 							</div>
 							<p class="mt-1 truncate font-semibold text-gray-900">{a.title}</p>
 							<p class="truncate text-sm text-gray-700">{a.message}</p>
 							<p class="mt-1 text-xs text-gray-400">
 								{#if a.startsAt || a.endsAt}
-									{a.startsAt ? fmt(a.startsAt) : 'ตอนนี้'} → {a.endsAt ? fmt(a.endsAt) : 'ไม่มีกำหนด'} ·
+									{a.startsAt ? fmt(a.startsAt) : 'ตอนนี้'} → {a.endsAt
+										? fmt(a.endsAt)
+										: 'ไม่มีกำหนด'} ·
 								{/if}
 								แก้ไขล่าสุด {fmt(a.updatedAt)}
 							</p>
