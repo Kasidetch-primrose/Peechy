@@ -463,7 +463,6 @@ export async function handleSubmit(e: SubmitEvent, editId: number | null) {
 		let gameId: number;
 		const posX = thumbnailUrl ? thumbnailPosition.x : undefined;
 		const posY = thumbnailUrl ? thumbnailPosition.y : undefined;
-		const accessToken = get(authUserStore).accessToken || undefined;
 		let creatorToken: string | undefined;
 
 		if (editId) {
@@ -481,7 +480,6 @@ export async function handleSubmit(e: SubmitEvent, editId: number | null) {
 					thumbnailPositionX: posX,
 					thumbnailPositionY: posY
 				},
-				accessToken,
 				creatorToken
 			);
 			if (res.status !== 'success') throw new Error(res.error ?? 'ไม่สามารถบันทึกเกมได้');
@@ -506,7 +504,7 @@ export async function handleSubmit(e: SubmitEvent, editId: number | null) {
 		}
 
 		if (pendingDeletes.length > 0)
-			await ImageService.deleteMany(pendingDeletes, accessToken, creatorToken);
+			await ImageService.deleteMany(pendingDeletes, creatorToken);
 
 		for (let i = 0; i < slots.length; i++) {
 			const slot = slots[i];
@@ -521,10 +519,10 @@ export async function handleSubmit(e: SubmitEvent, editId: number | null) {
 			};
 			let imageId: number;
 			if (slot.dbId !== undefined) {
-				await ImageService.update(slot.dbId, payload, accessToken, creatorToken);
+				await ImageService.update(slot.dbId, payload, creatorToken);
 				imageId = slot.dbId;
 			} else {
-				const created = await ImageService.create(payload, accessToken, creatorToken);
+				const created = await ImageService.create(payload, creatorToken);
 				if (created.status !== 'success') throw new Error('ไม่สามารถบันทึกรูปภาพได้');
 				imageId = created.doc.id;
 			}
@@ -533,7 +531,6 @@ export async function handleSubmit(e: SubmitEvent, editId: number | null) {
 				slot.hints
 					.filter((h) => h.hint.trim())
 					.map((h, idx) => ({ hint: h.hint.trim(), orderIndex: idx })),
-				accessToken,
 				creatorToken
 			);
 		}

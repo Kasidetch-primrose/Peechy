@@ -86,19 +86,13 @@ export function setActiveImage(idx: number) {
 }
 
 export async function deleteGame(id: number): Promise<{ ok: boolean; error?: string }> {
-	let accessToken: string | undefined;
 	let creatorToken: string | undefined;
-
-	// Read auth state synchronously from the store's current value
-	authUserStore.subscribe((s) => {
-		accessToken = s.accessToken || undefined;
-	})();
 
 	if (typeof localStorage !== 'undefined') {
 		creatorToken = localStorage.getItem(`creator_token_${id}`) ?? undefined;
 	}
 
-	const res = await GameService.deleteOne(id, accessToken, creatorToken);
+	const res = await GameService.deleteOne(id, creatorToken);
 	if (res.status === 'success') return { ok: true };
 	return { ok: false, error: res.error ?? 'เกิดข้อผิดพลาด' };
 }

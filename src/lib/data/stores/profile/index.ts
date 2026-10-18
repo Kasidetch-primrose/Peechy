@@ -92,11 +92,10 @@ function applyAvatarResult(res: IAvatarResponse): string {
 	return '';
 }
 
-async function withAccessToken(fn: (token: string) => Promise<IAvatarResponse>): Promise<string> {
-	const { accessToken } = get(authUserStore);
-	if (!accessToken) return 'กรุณาเข้าสู่ระบบอีกครั้ง';
+async function withLogin(fn: () => Promise<IAvatarResponse>): Promise<string> {
+	if (!get(authUserStore).accessToken) return 'กรุณาเข้าสู่ระบบอีกครั้ง';
 	try {
-		const res = await fn(accessToken);
+		const res = await fn();
 		if (res.error === 'Unauthorized') return 'เซสชันหมดอายุ กรุณาเข้าสู่ระบบอีกครั้ง';
 		return applyAvatarResult(res);
 	} catch {
@@ -105,21 +104,21 @@ async function withAccessToken(fn: (token: string) => Promise<IAvatarResponse>):
 }
 
 export const uploadAvatar = (file: Blob, crop: IAvatarCrop) =>
-	withAccessToken((t) => UserService.uploadAvatar(file, crop, t));
+	withLogin(() => UserService.uploadAvatar(file, crop));
 
 export const updateAvatarCrop = (crop: IAvatarCrop) =>
-	withAccessToken((t) => UserService.updateAvatarCrop(crop, t));
+	withLogin(() => UserService.updateAvatarCrop(crop));
 
-export const removeAvatar = () => withAccessToken((t) => UserService.removeAvatar(t));
+export const removeAvatar = () => withLogin(() => UserService.removeAvatar());
 
 export function setActiveTab(tab: ProfileTab) {
 	profileStore.update((s) => ({ ...s, activeTab: tab }));
 }
 
 export async function logout() {
-	const { user, accessToken } = get(authUserStore);
+	const { user, accessToken, refreshToken } = get(authUserStore);
 	if (user) {
-		await AuthService.logout(user.id, accessToken);
+		await AuthService.logout(accessToken, refreshToken);
 	}
 	authUserStore.set({ accessToken: '', refreshToken: '', user: null });
 	goto('/auth/login');

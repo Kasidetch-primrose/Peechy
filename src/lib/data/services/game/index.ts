@@ -1,3 +1,4 @@
+import { authFetch } from '$lib/data/stores/authUser';
 import type {
 	IGame,
 	ICreateGameRequest,
@@ -27,14 +28,11 @@ export default class GameService {
 	static async update(
 		id: number,
 		data: IUpdateGameRequest,
-		accessToken?: string,
 		creatorToken?: string
 	): Promise<ISingleResponse<IGame> & IStatusResponse> {
-		const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-		if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
-		const res = await fetch(`/api/games/${id}`, {
+		const res = await authFetch(`/api/games/${id}`, {
 			method: 'PUT',
-			headers,
+			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({ ...data, creatorToken })
 		});
 		return res.json();
@@ -42,14 +40,11 @@ export default class GameService {
 
 	static async deleteOne(
 		id: number,
-		accessToken?: string,
 		creatorToken?: string
 	): Promise<IStatusResponse> {
-		const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-		if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`;
-		const res = await fetch(`/api/games/${id}`, {
+		const res = await authFetch(`/api/games/${id}`, {
 			method: 'DELETE',
-			headers,
+			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({ creatorToken })
 		});
 		return res.json();
@@ -92,15 +87,11 @@ export default class GameService {
 	}
 
 	static async toggleLike(
-		gameId: number,
-		accessToken: string
+		gameId: number
 	): Promise<IStatusResponse & { liked?: boolean; likes?: number }> {
-		const res = await fetch(`/api/games/${gameId}/like`, {
+		const res = await authFetch(`/api/games/${gameId}/like`, {
 			method: 'POST',
-			headers: {
-				'Content-Type': 'application/json',
-				Authorization: `Bearer ${accessToken}`
-			}
+			headers: { 'Content-Type': 'application/json' }
 		});
 		return res.json();
 	}

@@ -140,8 +140,7 @@ export async function loadGame(gameId: number) {
 					undoStack: [],
 					score: 0,
 					isFinished: false
-				},
-				accessToken
+				}
 			);
 			if (sessionRes.status === 'success') session = sessionRes.doc;
 		}
@@ -265,13 +264,12 @@ export function nextImage() {
 		// Game finished
 		gamePlayStore.update((s) => ({ ...s, finished: true }));
 		if (session) {
-			const accessToken = get(authUserStore).accessToken;
-			if (accessToken) {
-				GameSessionService.update(
-					session.id,
-					{ currentImageIndex: nextIdx, score, isFinished: true },
-					accessToken
-				);
+			if (get(authUserStore).accessToken) {
+				GameSessionService.update(session.id, {
+					currentImageIndex: nextIdx,
+					score,
+					isFinished: true
+				});
 			}
 		}
 		return;
@@ -300,11 +298,11 @@ export function nextImage() {
 async function _persistSession() {
 	const { session, imageIdx, revealedTiles, undoStack, score } = get(gamePlayStore);
 	if (!session) return;
-	const accessToken = get(authUserStore).accessToken;
-	if (!accessToken) return;
-	await GameSessionService.update(
-		session.id,
-		{ currentImageIndex: imageIdx, revealedTiles, undoStack, score },
-		accessToken
-	);
+	if (!get(authUserStore).accessToken) return;
+	await GameSessionService.update(session.id, {
+		currentImageIndex: imageIdx,
+		revealedTiles,
+		undoStack,
+		score
+	});
 }

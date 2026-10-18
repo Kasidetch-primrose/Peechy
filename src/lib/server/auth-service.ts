@@ -1,7 +1,7 @@
 import { eq, and } from 'drizzle-orm';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
-import { randomInt } from 'node:crypto';
+import { randomInt, randomUUID } from 'node:crypto';
 import { env } from '$env/dynamic/private';
 import { db } from './db';
 import { users, userOAuthAccounts } from './db/UserModel';
@@ -33,7 +33,47 @@ const OTP_RESEND_COOLDOWN_SECONDS = 60;
 const otpKey = (email: string) => `otp:${email}`;
 const otpAttemptsKey = (email: string) => `otp_attempts:${email}`;
 const otpResendCooldownKey = (email: string) => `otp_resend_cooldown:${email}`;
-const refreshKey = (userId: number) => `refresh:${userId}`;
+/** One key per login session (sid), so logging in on another device doesn't end this one. */
+const refreshKey = (userId: number, sid: string) => `refresh:${userId}:${sid}`;
+/** The token that was just rotated out — still accepted briefly so two tabs refreshing at once both succeed. */
+const refreshPrevKey = (userId: number, sid: string) => `refresh_prev:${userId}:${sid}`;
+/** Pre-sid single-session key; only cleaned up on logout now. */
+const legacyRefreshKey = (userId: number) => `refresh:${userId}`;
+const REFRESH_GRACE_SECONDS = 30;
+
+/**
+ * KEYS: refresh, refresh_prev. ARGV: presented token, new token, refresh TTL, grace TTL.
+ * Presented == current, or nothing stored (the login-time write was lost) → store the new token,
+ * keep the presented one as prev → {'rotated'}.
+ * Presented == prev (inside the grace window) → no rotation, hand back the current token → {'grace', current}.
+ * Anything else (logged out, or an older rotated-out token) → {'revoked'}.
+ */
+const ROTATE_REFRESH_SCRIPT = `
+local cur = redis.call('GET', KEYS[1])
+if cur == ARGV[1] or not cur then
+	redis.call('SET', KEYS[1], ARGV[2], 'EX', ARGV[3])
+	redis.call('SET', KEYS[2], ARGV[1], 'EX', ARGV[4])
+	return {'rotated'}
+end
+if cur and redis.call('GET', KEYS[2]) == ARGV[1] then
+	return {'grace', cur}
+end
+return {'revoked'}
+`;
+
+/**
+ * KEYS: refresh, refresh_prev. ARGV: presented token ('' = any), TTL.
+ * Revokes only if the token is still live. Leaves a 'revoked' marker so a logged-out session
+ * differs from one whose token was never stored.
+ */
+const REVOKE_REFRESH_SCRIPT = `
+if ARGV[1] == '' or redis.call('GET', KEYS[1]) == ARGV[1] or redis.call('GET', KEYS[2]) == ARGV[1] then
+	redis.call('SET', KEYS[1], 'revoked', 'EX', ARGV[2])
+	redis.call('DEL', KEYS[2])
+	return 1
+end
+return 0
+`;
 
 function isRedisReady() {
 	return redis.status === 'ready';
@@ -49,6 +89,17 @@ async function tryRedisWrite(action: string, run: () => Promise<unknown>) {
 		await run();
 	} catch (error) {
 		console.warn(`[redis] ${action} failed:`, (error as Error).message);
+	}
+}
+
+/** Records a new login session's refresh token. */
+async function storeRefreshToken(userId: number, sid: string, refreshToken: string) {
+	// Not gated on 'ready': right after a cold start the client is still connecting and the
+	// offline queue sends this once connected. A lost write is tolerated by the rotate script.
+	try {
+		await redis.set(refreshKey(userId, sid), refreshToken, 'EX', REFRESH_TOKEN_SECONDS);
+	} catch (error) {
+		console.warn('[redis] store refresh token failed:', (error as Error).message);
 	}
 }
 
@@ -75,6 +126,10 @@ export interface JwtClaims {
 	username: string;
 	name: string | null;
 	isAdmin: boolean;
+	/** Which token this is. Tokens issued before this claim existed have none. */
+	typ?: 'access' | 'refresh';
+	/** Login session id, shared by a session's access and refresh tokens. Absent on older tokens. */
+	sid?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -91,21 +146,24 @@ function generateTokens(
 	email: string,
 	username: string,
 	name: string | null,
-	isAdmin: boolean
+	isAdmin: boolean,
+	sid: string = randomUUID()
 ) {
-	const now = Math.floor(Date.now() / 1000);
+	const basePayload = { userId, email, username, name, isAdmin, sid, iss: ISSUER, aud: AUDIENCE };
 
-	const basePayload = { userId, email, username, name, isAdmin, iss: ISSUER, aud: AUDIENCE };
+	const accessToken = jwt.sign(
+		{ ...basePayload, typ: 'access', sub: `${AUDIENCE}:${userId}` },
+		SECRET_KEY,
+		{ expiresIn: ACCESS_TOKEN_SECONDS }
+	);
 
-	const accessToken = jwt.sign({ ...basePayload, sub: `${AUDIENCE}:${userId}` }, SECRET_KEY, {
-		expiresIn: ACCESS_TOKEN_SECONDS
-	});
+	const refreshToken = jwt.sign(
+		{ ...basePayload, typ: 'refresh', sub: `${AUDIENCE}:${userId}` },
+		SECRET_KEY,
+		{ expiresIn: REFRESH_TOKEN_SECONDS, jwtid: randomUUID() } // unique even when rotated twice in one second
+	);
 
-	const refreshToken = jwt.sign({ ...basePayload, sub: `${AUDIENCE}:${userId}` }, SECRET_KEY, {
-		expiresIn: REFRESH_TOKEN_SECONDS
-	});
-
-	return { accessToken, refreshToken };
+	return { accessToken, refreshToken, sid };
 }
 
 function parseToken(token: string): JwtClaims {
@@ -117,7 +175,9 @@ function parseToken(token: string): JwtClaims {
 
 export function verifyAccessToken(token: string): JwtClaims | null {
 	try {
-		return parseToken(token);
+		const claims = parseToken(token);
+		// A 90-day refresh token must not work as a Bearer access token.
+		return claims.typ === 'refresh' ? null : claims;
 	} catch {
 		return null;
 	}
@@ -259,7 +319,7 @@ export async function login(email: string, password: string) {
 	const passwordMatch = await bcrypt.compare(password, user.password);
 	if (!passwordMatch) throw new Error('Invalid credentials');
 
-	const { accessToken, refreshToken } = generateTokens(
+	const { accessToken, refreshToken, sid } = generateTokens(
 		user.id,
 		user.email,
 		user.username,
@@ -267,10 +327,7 @@ export async function login(email: string, password: string) {
 		user.isAdmin
 	);
 
-	// Best-effort session cache; token issuance does not depend on Redis.
-	await tryRedisWrite('store refresh token', () =>
-		redis.set(refreshKey(user.id), refreshToken, 'EX', REFRESH_TOKEN_SECONDS)
-	);
+	await storeRefreshToken(user.id, sid, refreshToken);
 
 	return {
 		accessToken,
@@ -303,6 +360,7 @@ export async function refreshAccessToken(token: string) {
 	} catch {
 		throw new Error('Invalid or expired refresh token');
 	}
+	if (payload.typ === 'access') throw new Error('Invalid or expired refresh token');
 
 	const [user] = await db
 		.select({
@@ -319,30 +377,88 @@ export async function refreshAccessToken(token: string) {
 
 	if (!user || user.deletedAt) throw new Error('User not found');
 
-	// Rotate: invalidate old token, issue fresh pair
-	const { accessToken, refreshToken } = generateTokens(
+	// Token from before per-session ids: nothing in Redis to check it against. Move it onto a new
+	// session so it becomes revocable; these stop existing once the last one expires.
+	if (!payload.sid) {
+		const fresh = generateTokens(user.id, user.email, user.username, user.name, user.isAdmin);
+		await storeRefreshToken(user.id, fresh.sid, fresh.refreshToken);
+		return { accessToken: fresh.accessToken, refreshToken: fresh.refreshToken };
+	}
+
+	const { accessToken, refreshToken, sid } = generateTokens(
 		user.id,
 		user.email,
 		user.username,
 		user.name,
-		user.isAdmin
-	);
-	await tryRedisWrite('store rotated refresh token', () =>
-		redis.set(refreshKey(user.id), refreshToken, 'EX', REFRESH_TOKEN_SECONDS)
+		user.isAdmin,
+		payload.sid
 	);
 
-	return { accessToken, refreshToken };
+	let result: [string, string?];
+	try {
+		result = (await redis.eval(
+			ROTATE_REFRESH_SCRIPT,
+			2,
+			refreshKey(user.id, payload.sid),
+			refreshPrevKey(user.id, payload.sid),
+			token,
+			refreshToken,
+			REFRESH_TOKEN_SECONDS,
+			REFRESH_GRACE_SECONDS
+		)) as [string, string?];
+	} catch (error) {
+		// Redis unreachable: can't check or rotate. Keep the presented refresh token (it stays the
+		// stored one) and only renew the access token.
+		console.warn('[redis] refresh token check failed:', (error as Error).message);
+		return { accessToken, refreshToken: token };
+	}
+
+	if (result[0] === 'rotated') return { accessToken, refreshToken };
+	// Another tab rotated this token a moment ago — join its session instead of logging this one out.
+	if (result[0] === 'grace' && result[1]) return { accessToken, refreshToken: result[1] };
+	throw new Error('Refresh token revoked');
 }
 
 // ---------------------------------------------------------------------------
 // Logout
 // ---------------------------------------------------------------------------
 
+function revokeSession(userId: number, sid: string, token = '') {
+	return tryRedisWrite('revoke refresh token', () =>
+		redis.eval(
+			REVOKE_REFRESH_SCRIPT,
+			2,
+			refreshKey(userId, sid),
+			refreshPrevKey(userId, sid),
+			token,
+			REFRESH_TOKEN_SECONDS
+		)
+	);
+}
+
 /**
- * Revokes the refresh token for the given user, effectively logging them out.
+ * Ends the login session the given access token belongs to (other devices stay logged in).
  */
-export async function logout(userId: number) {
-	await tryRedisWrite('delete refresh token', () => redis.del(refreshKey(userId)));
+export async function logout(claims: JwtClaims) {
+	if (claims.sid) await revokeSession(claims.userId, claims.sid);
+	else await tryRedisWrite('delete refresh token', () => redis.del(legacyRefreshKey(claims.userId)));
+}
+
+/**
+ * Logs out using the refresh token itself, so a session whose access token has expired can still revoke it.
+ * Only revokes when the token is the session's live one. Returns false when the token is not a validly signed refresh token.
+ */
+export async function logoutWithRefreshToken(token: string): Promise<boolean> {
+	let payload: JwtClaims;
+	try {
+		payload = parseToken(token);
+	} catch {
+		return false;
+	}
+	if (payload.typ === 'access') return false;
+
+	if (payload.sid) await revokeSession(payload.userId, payload.sid, token);
+	return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -389,16 +505,14 @@ export async function loginWithOAuth(
 
 		if (!user || user.deletedAt) throw new Error('User not found');
 
-		const { accessToken, refreshToken } = generateTokens(
+		const { accessToken, refreshToken, sid } = generateTokens(
 			user.id,
 			user.email,
 			user.username,
 			user.name,
 			user.isAdmin
 		);
-		await tryRedisWrite('store refresh token', () =>
-			redis.set(refreshKey(user.id), refreshToken, 'EX', REFRESH_TOKEN_SECONDS)
-		);
+		await storeRefreshToken(user.id, sid, refreshToken);
 		return {
 			accessToken,
 			refreshToken,
@@ -423,16 +537,14 @@ export async function loginWithOAuth(
 				.insert(userOAuthAccounts)
 				.values({ userId: existingUser.id, provider, providerUserId });
 
-			const { accessToken, refreshToken } = generateTokens(
+			const { accessToken, refreshToken, sid } = generateTokens(
 				existingUser.id,
 				existingUser.email,
 				existingUser.username,
 				existingUser.name,
 				existingUser.isAdmin
 			);
-			await tryRedisWrite('store refresh token', () =>
-				redis.set(refreshKey(existingUser.id), refreshToken, 'EX', REFRESH_TOKEN_SECONDS)
-			);
+			await storeRefreshToken(existingUser.id, sid, refreshToken);
 			return {
 				accessToken,
 				refreshToken,
@@ -481,16 +593,14 @@ export async function loginWithOAuth(
 
 	await db.insert(userOAuthAccounts).values({ userId: newUser.id, provider, providerUserId });
 
-	const { accessToken, refreshToken } = generateTokens(
+	const { accessToken, refreshToken, sid } = generateTokens(
 		newUser.id,
 		newUser.email,
 		newUser.username,
 		newUser.name,
 		false
 	);
-	await tryRedisWrite('store refresh token', () =>
-		redis.set(refreshKey(newUser.id), refreshToken, 'EX', REFRESH_TOKEN_SECONDS)
-	);
+	await storeRefreshToken(newUser.id, sid, refreshToken);
 
 	return {
 		accessToken,

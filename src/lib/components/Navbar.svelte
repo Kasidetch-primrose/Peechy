@@ -64,10 +64,10 @@
 	];
 
 	async function handleLogout() {
-		const { user, accessToken } = $authUserStore;
+		const { user, accessToken, refreshToken } = $authUserStore;
 
 		if (user) {
-			await AuthService.logout(user.id, accessToken);
+			await AuthService.logout(accessToken, refreshToken);
 		}
 
 		authUserStore.set({ accessToken: '', refreshToken: '', user: null });

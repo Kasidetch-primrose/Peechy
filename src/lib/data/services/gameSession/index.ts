@@ -1,3 +1,4 @@
+import { authFetch } from '$lib/data/stores/authUser';
 import type {
 	IGameSession,
 	ICreateSessionRequest,
@@ -10,15 +11,11 @@ import type {
 
 export default class GameSessionService {
 	static async create(
-		data: ICreateSessionRequest,
-		accessToken: string
+		data: ICreateSessionRequest
 	): Promise<ISingleResponse<IGameSession> & IStatusResponse> {
-		const res = await fetch('/api/game-sessions', {
+		const res = await authFetch('/api/game-sessions', {
 			method: 'POST',
-			headers: {
-				'Content-Type': 'application/json',
-				Authorization: `Bearer ${accessToken}`
-			},
+			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify(data)
 		});
 		return res.json();
@@ -31,15 +28,11 @@ export default class GameSessionService {
 
 	static async update(
 		id: number,
-		data: IUpdateSessionRequest,
-		accessToken: string
+		data: IUpdateSessionRequest
 	): Promise<ISingleResponse<IGameSession> & IStatusResponse> {
-		const res = await fetch(`/api/game-sessions/${id}`, {
+		const res = await authFetch(`/api/game-sessions/${id}`, {
 			method: 'PUT',
-			headers: {
-				'Content-Type': 'application/json',
-				Authorization: `Bearer ${accessToken}`
-			},
+			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify(data)
 		});
 		return res.json();

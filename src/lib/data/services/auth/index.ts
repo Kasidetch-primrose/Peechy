@@ -55,14 +55,19 @@ export default class AuthService {
 		return res.json();
 	}
 
-	static async logout(userId: number, accessToken: string): Promise<void> {
-		await fetch('/api/auth/logout', {
-			method: 'POST',
-			headers: {
-				Authorization: `Bearer ${accessToken}`,
-				'Content-Type': 'application/json'
-			},
-			body: JSON.stringify({ userId })
-		});
+	/** The refresh token in the body lets logout revoke the session even after the access token expired. */
+	static async logout(accessToken: string, refreshToken: string): Promise<void> {
+		try {
+			await fetch('/api/auth/logout', {
+				method: 'POST',
+				headers: {
+					...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+					'Content-Type': 'application/json'
+				},
+				body: JSON.stringify({ refreshToken })
+			});
+		} catch {
+			// offline — the caller still clears the local session
+		}
 	}
 }

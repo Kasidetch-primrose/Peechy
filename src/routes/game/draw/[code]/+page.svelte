@@ -6,8 +6,7 @@
 	import { uploadReferenceImage } from '$lib/utils/reference-image';
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
-	import { authUserStore } from '$lib/data/stores/authUser';
-	import AuthService from '$lib/data/services/auth';
+	import { authUserStore, refreshSession } from '$lib/data/stores/authUser';
 	import { connect, drawingStore, joinRoom, leaveRoom } from '$lib/data/stores/drawing';
 	import DrawingService from '$lib/data/services/multiplayer/drawing';
 	import DrawCanvas from '$lib/components/DrawCanvas.svelte';
@@ -495,18 +494,13 @@
 					headers: token ? { Authorization: `Bearer ${token}` } : {},
 					body: form
 				});
-			let auth = get(authUserStore);
+			const auth = get(authUserStore);
 			let res = await send(auth.accessToken);
 			if (res.status === 401 && auth.refreshToken) {
 				// Access tokens last 24h; renew with the refresh token and retry once.
-				const renewed = await AuthService.refresh(auth.refreshToken).catch(() => null);
-				if (renewed?.accessToken) {
-					authUserStore.update((s) => ({
-						...s,
-						accessToken: renewed.accessToken,
-						refreshToken: renewed.refreshToken ?? s.refreshToken
-					}));
-					res = await send(renewed.accessToken);
+				const renewed = await refreshSession();
+				if (renewed) {
+					res = await send(renewed);
 				} else {
 					res = await send(''); // session is gone: publish as a guest rather than lose the drawing
 				}

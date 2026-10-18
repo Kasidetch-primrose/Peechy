@@ -51,8 +51,7 @@
 	});
 
 	async function toggleLike() {
-		const accessToken = $authUserStore.accessToken;
-		if (!accessToken || likeLoading) return;
+		if (!$authUserStore.accessToken || likeLoading) return;
 
 		likeLoading = true;
 		const prevLiked = liked;
@@ -61,7 +60,7 @@
 		likes = Math.max(0, likes + (liked ? 1 : -1));
 
 		try {
-			const res = await GameService.toggleLike(game.id, accessToken);
+			const res = await GameService.toggleLike(game.id);
 			if (res.status === 'success') {
 				liked = Boolean(res.liked);
 				likes = res.likes ?? likes;
