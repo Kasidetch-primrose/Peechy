@@ -100,7 +100,7 @@
 <div class="relative block">
 	<a
 		href={`/game/detail/${game.id}`}
-		class="group relative block h-76 {compact ? 'max-sm:h-56' : ''} overflow-hidden rounded-2xl [box-shadow:0_4px_16px_-2px_rgba(255,155,115,0.18),0_1px_4px_rgba(0,0,0,0.06)] transition-[transform,box-shadow] duration-350 [transition-timing-function:cubic-bezier(0.34,1.56,0.64,1)] will-change-transform hover:-translate-y-1.5 hover:scale-[1.02] hover:[box-shadow:0_20px_40px_-8px_rgba(255,155,115,0.3),0_4px_12px_rgba(0,0,0,0.08)]"
+		class="group relative block h-76 {compact ? 'max-sm:aspect-[9/10] max-sm:h-auto' : ''} overflow-hidden rounded-2xl [box-shadow:0_4px_16px_-2px_rgba(255,155,115,0.18),0_1px_4px_rgba(0,0,0,0.06)] transition-[transform,box-shadow] duration-350 [transition-timing-function:cubic-bezier(0.34,1.56,0.64,1)] will-change-transform hover:-translate-y-1.5 hover:scale-[1.02] hover:[box-shadow:0_20px_40px_-8px_rgba(255,155,115,0.3),0_4px_12px_rgba(0,0,0,0.08)]"
 		aria-label={`เปิดรายละเอียดเกม ${game.name}`}
 	>
 		<!-- Full-bleed cover -->
@@ -119,7 +119,7 @@
 				>
 					<span
 						class="-translate-y-[3.6rem] text-5xl {compact
-							? 'max-sm:-translate-y-[2.75rem] max-sm:text-4xl'
+							? 'max-sm:-translate-y-[2.125rem] max-sm:text-4xl'
 							: ''} [filter:drop-shadow(0_4px_10px_rgba(0,0,0,0.15))]"
 						>{emoji}</span
 					>
@@ -129,7 +129,7 @@
 
 		<!-- Soft edge-fade just above the glass panel -->
 		<div
-			class="absolute inset-x-0 bottom-[7.2rem] {compact ? 'max-sm:bottom-[5.5rem] max-sm:h-10' : ''} z-1 h-16 bg-gradient-to-b from-transparent to-black/28"
+			class="absolute inset-x-0 bottom-[7.2rem] {compact ? 'max-sm:bottom-[4.25rem] max-sm:h-10' : ''} z-1 h-16 bg-gradient-to-b from-transparent to-black/28"
 		></div>
 
 		<!-- Difficulty badge -->
@@ -147,7 +147,7 @@
 		<!-- Glass panel -->
 		<div
 			class="absolute inset-x-0 bottom-0 z-10 flex h-[7.2rem] flex-col gap-[0.28rem] border-t border-white/35 bg-white/18 px-4 pt-[0.85rem] pb-[0.9rem] {compact
-				? 'max-sm:h-[5.5rem] max-sm:gap-[0.15rem] max-sm:px-2.5 max-sm:pt-[0.55rem] max-sm:pb-[0.6rem]'
+				? 'max-sm:h-[4.25rem] max-sm:gap-[0.15rem] max-sm:px-2.5 max-sm:pt-[0.5rem] max-sm:pb-[0.5rem]'
 				: ''} [backdrop-filter:blur(20px)_saturate(200%)_brightness(1.1)]"
 		>
 			<h3
@@ -158,7 +158,7 @@
 
 			{#if game.description}
 				<p
-					class="m-0 line-clamp-1 animate-rise text-[0.76rem] {compact ? 'max-sm:text-[0.68rem]' : ''} leading-snug text-gray-900/75 [animation-delay:0.09s]"
+					class="m-0 line-clamp-1 animate-rise text-[0.76rem] {compact ? 'max-sm:hidden' : ''} leading-snug text-gray-900/75 [animation-delay:0.09s]"
 				>
 					{game.description}
 				</p>
