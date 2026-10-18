@@ -11,6 +11,7 @@
 		difficultyBg
 	} from '$lib/data/stores/game-detail';
 	import { authUserStore } from '$lib/data/stores/authUser';
+	import Avatar from '$lib/components/Avatar.svelte';
 	// ── "เล่นหลายคน" (create multiplayer room) logic — commented out while
 	// realtime-server (Railway) is offline. To restore: uncomment this import
 	// block, the state + functions block below, and swap the disabled button +
@@ -237,6 +238,26 @@
 				<div class="flex flex-wrap items-start gap-2">
 					<h1 class="text-2xl font-bold text-gray-900 sm:text-3xl">{game.name}</h1>
 				</div>
+
+				<!-- ! Creator (skipped for games made by guests) -->
+				{#if game.creatorUsername}
+					<div class="flex min-w-0 items-center gap-2 text-sm text-gray-500">
+						โดย
+						<a
+							href={`/profile/${game.creatorId}`}
+							title={game.creatorUsername}
+							class="inline-flex min-w-0 items-center gap-2 rounded-full border border-primary-200 bg-white/70 py-1 pr-3 pl-1 font-medium text-gray-700 shadow-sm transition-colors hover:border-primary-300 hover:bg-white focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:outline-none"
+						>
+							<Avatar
+								url={game.creatorAvatarUrl}
+								crop={game.creatorAvatarCrop}
+								name={game.creatorUsername.charAt(0)}
+								class="h-6 w-6 text-xs"
+							/>
+							<span class="truncate">{game.creatorUsername}</span>
+						</a>
+					</div>
+				{/if}
 
 				<div class="flex flex-wrap items-center gap-2">
 					{#if game.difficulty}

@@ -1,6 +1,6 @@
 import { db } from '$lib/server/db';
 import { games } from '$lib/server/db/GamesModel';
-import { userGameLikes } from '$lib/server/db/UserModel';
+import { userGameLikes, users } from '$lib/server/db/UserModel';
 import { eq, isNull, ilike, and, inArray, sql, desc, lt } from 'drizzle-orm';
 
 // ---------------------------------------------------------------------------
@@ -61,8 +61,15 @@ const publicGameFields = {
 
 export async function getOne(id: number) {
 	const [item] = await db
-		.select(publicGameFields)
+		// creatorUsername is null for games made by guests (no creatorId)
+		.select({
+			...publicGameFields,
+			creatorUsername: users.username,
+			creatorAvatarUrl: users.avatarUrl,
+			creatorAvatarCrop: users.avatarCrop
+		})
 		.from(games)
+		.leftJoin(users, eq(users.id, games.creatorId))
 		.where(and(eq(games.id, id), isNull(games.deletedAt)));
 	return item ?? null;
 }
@@ -197,8 +204,15 @@ export async function paginate(payload: PaginateGamesPayload) {
 		.where(where);
 
 	const items = await db
-		.select(publicGameFields)
+		// creatorUsername is null for games made by guests (no creatorId)
+		.select({
+			...publicGameFields,
+			creatorUsername: users.username,
+			creatorAvatarUrl: users.avatarUrl,
+			creatorAvatarCrop: users.avatarCrop
+		})
 		.from(games)
+		.leftJoin(users, eq(users.id, games.creatorId))
 		.where(where)
 		.orderBy(desc(games.createdAt))
 		.limit(limit)

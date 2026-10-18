@@ -144,7 +144,7 @@
 				</h1>
 			</div>
 
-			<form onsubmit={(e) => handleSubmit(e, editId)} class="mx-auto flex w-225 flex-col gap-5">
+			<form onsubmit={(e) => handleSubmit(e, editId)} class="mx-auto flex w-225 max-w-full flex-col gap-5">
 				<!-- ! ── Game metadata card ─────────────────────────────────── -->
 				<section
 					class="rounded-2xl border border-primary-100/60 bg-white/80 p-6 shadow-md backdrop-blur-sm"
@@ -626,7 +626,7 @@
 								<div class="shrink-0">
 									{#if slot.previewUrl}
 										<div
-											class="relative h-44 w-44 overflow-hidden rounded-xl border border-gray-200"
+											class="relative h-44 w-full overflow-hidden rounded-xl border border-gray-200 sm:w-44"
 										>
 											<img
 												src={slot.previewUrl}
@@ -721,7 +721,7 @@
 										</div>
 									{:else}
 										<label
-											class="flex h-44 w-44 cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 text-center transition-colors hover:border-primary-400 hover:bg-primary-100/30"
+											class="flex h-44 w-full cursor-pointer flex-col sm:w-44 items-center justify-center gap-2 rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 text-center transition-colors hover:border-primary-400 hover:bg-primary-100/30"
 										>
 											<svg
 												xmlns="http://www.w3.org/2000/svg"
@@ -754,7 +754,7 @@
 								</div>
 
 								<!-- ! Fields -->
-								<div class="flex flex-1 flex-col gap-3">
+								<div class="flex min-w-0 flex-1 flex-col gap-3">
 									<!-- ! Answer -->
 									<div class="flex flex-col gap-1">
 										<label for="answer-{slot._id}" class="text-xs font-medium text-gray-700">

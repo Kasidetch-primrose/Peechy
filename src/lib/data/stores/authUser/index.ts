@@ -1,5 +1,5 @@
 import type { IAuthUser } from '$lib/data/interface/auth';
-import { writable } from 'svelte/store';
+import { get, writable } from 'svelte/store';
 
 const STORAGE_KEY = 'peechy_auth';
 
@@ -33,3 +33,23 @@ authUserStore.subscribe((state) => {
 		localStorage.removeItem(STORAGE_KEY);
 	}
 });
+
+/** Merges fresh public profile fields (e.g. avatar) into the stored user; sessions saved before a change may be stale. */
+export function patchAuthUser(patch: Partial<IAuthUser>) {
+	authUserStore.update((s) => (s.user ? { ...s, user: { ...s.user, ...patch } } : s));
+}
+
+export async function syncAuthUserProfile() {
+	const user = get(authUserStore).user;
+	if (!user) return;
+	try {
+		const res = await fetch(`/api/users/${user.id}`);
+		if (!res.ok) return;
+		const { doc } = await res.json();
+		if (doc && get(authUserStore).user?.id === doc.id) {
+			patchAuthUser({ name: doc.name, avatarUrl: doc.avatarUrl, avatarCrop: doc.avatarCrop });
+		}
+	} catch {
+		// offline / server down — keep the cached user
+	}
+}

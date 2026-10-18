@@ -2,6 +2,7 @@
 	import GameService from '$lib/data/services/game';
 	import { authUserStore } from '$lib/data/stores/authUser';
 	import type { IGame } from '$lib/data/interface/game';
+	import Avatar from '$lib/components/Avatar.svelte';
 
 	const COVER_COLORS = [
 		'linear-gradient(135deg, #FFD4A8 0%, #FFAAB0 100%)',
@@ -32,6 +33,9 @@
 		confirmUnlike = false,
 		compact = false
 	}: { game: IGame; confirmUnlike?: boolean; compact?: boolean } = $props();
+	// Unique per card so each card's SVG filter id doesn't clash with the others on the page.
+	const uid = $props.id();
+	const glassFilterId = `glass-blur-${uid}`;
 	let likeLoading = $state(false);
 	let liked = $state(false);
 	let likes = $state(0);
@@ -97,34 +101,54 @@
 	}
 </script>
 
-<div class="relative block">
+{#snippet cover(decorative: boolean)}
+	{#if game.thumbnailUrl}
+		<img
+			src={game.thumbnailUrl}
+			alt={decorative ? '' : game.name}
+			class="h-full w-full scale-100 object-cover transition-transform duration-550 ease-[cubic-bezier(0.25,0.46,0.45,0.94)] group-hover:scale-[1.08]"
+			style="object-position: {game.thumbnailPositionX ?? 50}% {game.thumbnailPositionY ?? 50}%"
+		/>
+	{:else}
+		<div
+			class="flex h-full w-full scale-100 items-center justify-center transition-transform duration-550 ease-[cubic-bezier(0.25,0.46,0.45,0.94)] group-hover:scale-[1.08]"
+			style="background: {coverGradient};"
+		>
+			<span
+				class="-translate-y-[3.6rem] text-5xl {compact
+					? 'max-sm:-translate-y-[2.125rem] max-sm:text-4xl'
+					: ''} [filter:drop-shadow(0_4px_10px_rgba(0,0,0,0.15))]"
+				>{emoji}</span
+			>
+		</div>
+	{/if}
+{/snippet}
+
+<!-- group lives on the wrapper so hovering the heart keeps the card lifted, and vice versa -->
+<div class="group relative block">
 	<a
 		href={`/game/detail/${game.id}`}
-		class="group relative block h-76 {compact ? 'max-sm:aspect-[9/10] max-sm:h-auto' : ''} overflow-hidden rounded-2xl [box-shadow:0_4px_16px_-2px_rgba(255,155,115,0.18),0_1px_4px_rgba(0,0,0,0.06)] transition-[transform,box-shadow] duration-350 [transition-timing-function:cubic-bezier(0.34,1.56,0.64,1)] will-change-transform hover:-translate-y-1.5 hover:scale-[1.02] hover:[box-shadow:0_20px_40px_-8px_rgba(255,155,115,0.3),0_4px_12px_rgba(0,0,0,0.08)]"
+		class="relative block h-76 {compact ? 'max-sm:aspect-[9/10] max-sm:h-auto' : ''} overflow-hidden rounded-2xl [box-shadow:0_4px_16px_-2px_rgba(255,155,115,0.18),0_1px_4px_rgba(0,0,0,0.06)] transition-[translate,scale,box-shadow] duration-350 [transition-timing-function:cubic-bezier(0.34,1.56,0.64,1)] will-change-transform group-hover:-translate-y-1.5 group-hover:scale-[1.02] group-hover:[box-shadow:0_20px_40px_-8px_rgba(255,155,115,0.3),0_4px_12px_rgba(0,0,0,0.08)]"
 		aria-label={`เปิดรายละเอียดเกม ${game.name}`}
 	>
-		<!-- Full-bleed cover -->
-		<div class="absolute inset-0 overflow-hidden">
-			{#if game.thumbnailUrl}
-				<img
-					src={game.thumbnailUrl}
-					alt={game.name}
-					class="h-full w-full scale-100 object-cover transition-transform duration-550 ease-[cubic-bezier(0.25,0.46,0.45,0.94)] group-hover:scale-[1.08]"
-					style="object-position: {game.thumbnailPositionX ?? 50}% {game.thumbnailPositionY ?? 50}%"
-				/>
-			{:else}
-				<div
-					class="flex h-full w-full scale-100 items-center justify-center transition-transform duration-550 ease-[cubic-bezier(0.25,0.46,0.45,0.94)] group-hover:scale-[1.08]"
-					style="background: {coverGradient};"
-				>
-					<span
-						class="-translate-y-[3.6rem] text-5xl {compact
-							? 'max-sm:-translate-y-[2.125rem] max-sm:text-4xl'
-							: ''} [filter:drop-shadow(0_4px_10px_rgba(0,0,0,0.15))]"
-						>{emoji}</span
-					>
-				</div>
-			{/if}
+		<!-- Full-bleed cover. No clip of its own: the card's rounded clip crops both this and the
+		     glass panel, so their edges always land on the same pixel. -->
+		<div class="absolute inset-0">
+			{@render cover(false)}
+		</div>
+
+		<!-- Glass blur: a blurred copy of the cover, clipped to the glass panel's area. A backdrop-filter
+		     mirrors the image at the card's edges, which leaves the left/right edges visibly sharper;
+		     this filter only averages real pixels, so the blur is even edge to edge. -->
+		<div
+			class="absolute inset-0 z-[5] [clip-path:inset(calc(100%_-_7.2rem)_0_0_0)] {compact
+				? 'max-sm:[clip-path:inset(calc(100%_-_4.25rem)_0_0_0)]'
+				: ''}"
+			aria-hidden="true"
+		>
+			<div class="h-full w-full" style="filter: url(#{glassFilterId}) saturate(2) brightness(1.1)">
+				{@render cover(true)}
+			</div>
 		</div>
 
 		<!-- Soft edge-fade just above the glass panel -->
@@ -148,7 +172,7 @@
 		<div
 			class="absolute inset-x-0 bottom-0 z-10 flex h-[7.2rem] flex-col gap-[0.28rem] border-t border-white/35 bg-white/18 px-4 pt-[0.85rem] pb-[0.9rem] {compact
 				? 'max-sm:h-[4.25rem] max-sm:gap-[0.15rem] max-sm:px-2.5 max-sm:pt-[0.5rem] max-sm:pb-[0.5rem]'
-				: ''} [backdrop-filter:blur(20px)_saturate(200%)_brightness(1.1)]"
+				: ''}"
 		>
 			<h3
 				class="m-0 animate-rise overflow-hidden text-base {compact ? 'max-sm:text-sm' : ''} leading-tight font-bold text-ellipsis whitespace-nowrap text-gray-900 [animation-delay:0.04s]"
@@ -164,9 +188,9 @@
 				</p>
 			{/if}
 
-			<div class="mt-auto flex animate-rise items-center justify-between [animation-delay:0.14s]">
+			<div class="mt-auto flex animate-rise items-center justify-between gap-2 [animation-delay:0.14s]">
 				<span
-					class="flex items-center gap-1.5 text-[0.73rem] {compact
+					class="flex shrink-0 items-center gap-1.5 text-[0.73rem] {compact
 						? 'max-sm:gap-1 max-sm:text-[0.65rem]'
 						: ''} text-gray-900/60"
 				>
@@ -190,47 +214,71 @@
 					{game.playCount?.toLocaleString() ?? 0} ผู้เล่น
 				</span>
 
-				<span
-					class="inline-block rounded-full bg-primary-500 px-[1.1rem] py-[0.4rem] text-[0.73rem] {compact
-						? 'max-sm:px-2.5 max-sm:py-1 max-sm:text-[0.65rem]'
-						: ''} tracking-wide text-gray-900 shadow-[0_2px_8px_rgba(255,155,115,0.4)] transition-[background-color,transform] duration-200 group-hover:scale-105 group-hover:bg-primary-400"
-				>
-					เล่นเลย →
-				</span>
+				<!-- Creator chip (skipped for games made by guests) -->
+				{#if game.creatorUsername}
+					<span
+						class="inline-flex min-w-0 items-center gap-1.5 rounded-full border border-white/60 bg-white/65 py-[0.2rem] pr-[0.65rem] pl-[0.2rem] text-[0.72rem] font-medium text-gray-700 shadow-[0_2px_8px_rgba(255,155,115,0.25)] backdrop-blur-sm transition-[background-color,scale] duration-200 group-hover:scale-105 group-hover:bg-white/85 {compact
+							? 'max-sm:gap-1 max-sm:pr-2 max-sm:pl-[0.15rem] max-sm:text-[0.62rem]'
+							: ''}"
+						title={game.creatorUsername}
+					>
+						<Avatar
+							url={game.creatorAvatarUrl}
+							crop={game.creatorAvatarCrop}
+							name={game.creatorUsername.charAt(0)}
+							class="h-5 w-5 text-[0.62rem] {compact ? 'max-sm:h-4 max-sm:w-4 max-sm:text-[0.55rem]' : ''}"
+						/>
+						<span class="truncate">{game.creatorUsername}</span>
+					</span>
+				{/if}
 			</div>
 		</div>
 	</a>
 
-	<!-- Like button -->
+	<!-- Blur that ignores everything outside the image: blurring treats the outside as transparent,
+	     and forcing alpha back to 1 divides that out, so edge pixels average only real image pixels. -->
+	<svg class="absolute h-0 w-0" aria-hidden="true">
+		<filter id={glassFilterId} color-interpolation-filters="sRGB">
+			<feGaussianBlur stdDeviation="20" />
+			<feComponentTransfer><feFuncA type="table" tableValues="1 1" /></feComponentTransfer>
+		</filter>
+	</svg>
+
+	<!-- Like button. It sits on a layer the size of the card that lifts and scales exactly like the
+	     card on hover, so the heart stays pinned to the card's corner instead of being left behind. -->
 	{#if $authUserStore.user}
-		<button
-			type="button"
-			onclick={handleToggleLike}
-			aria-label={liked ? `ยกเลิกถูกใจเกม ${game.name}` : `ถูกใจเกม ${game.name}`}
-			disabled={likeLoading}
-			class="absolute top-[0.7rem] right-[0.7rem] z-20 flex items-center gap-1 rounded-full border-none bg-white/85 px-[0.55rem] py-[0.32rem] text-gray-400 shadow-[0_2px_8px_rgba(0,0,0,0.1)] backdrop-blur-sm transition-[color,transform] duration-200 [transition-timing-function:cubic-bezier(0.34,1.56,0.64,1)] hover:scale-[1.14] hover:text-red-500 disabled:cursor-not-allowed disabled:opacity-50 {liked
-				? 'text-red-500'
-				: ''}"
+		<div
+			class="pointer-events-none absolute inset-0 z-20 transition-[translate,scale] duration-350 [transition-timing-function:cubic-bezier(0.34,1.56,0.64,1)] will-change-transform group-hover:-translate-y-1.5 group-hover:scale-[1.02]"
 		>
-			<svg
-				xmlns="http://www.w3.org/2000/svg"
-				width="15"
-				height="15"
-				viewBox="0 0 24 24"
-				fill={liked ? 'currentColor' : 'none'}
-				stroke="currentColor"
-				stroke-width="2"
-				stroke-linecap="round"
-				stroke-linejoin="round"
+			<button
+				type="button"
+				onclick={handleToggleLike}
+				aria-label={liked ? `ยกเลิกถูกใจเกม ${game.name}` : `ถูกใจเกม ${game.name}`}
+				disabled={likeLoading}
+				class="pointer-events-auto absolute top-[0.7rem] right-[0.7rem] flex items-center gap-1 rounded-full border-none bg-white/85 px-[0.55rem] py-[0.32rem] text-gray-400 shadow-[0_2px_8px_rgba(0,0,0,0.1)] backdrop-blur-sm transition-[color,scale] duration-200 [transition-timing-function:cubic-bezier(0.34,1.56,0.64,1)] hover:scale-[1.14] hover:text-red-500 disabled:cursor-not-allowed disabled:opacity-50 {liked
+					? 'text-red-500'
+					: ''}"
 			>
-				<path
-					d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"
-				/>
-			</svg>
-			{#if likes > 0}
-				<span class="text-[0.68rem] font-semibold text-inherit">{likes.toLocaleString()}</span>
-			{/if}
-		</button>
+				<svg
+					xmlns="http://www.w3.org/2000/svg"
+					width="15"
+					height="15"
+					viewBox="0 0 24 24"
+					fill={liked ? 'currentColor' : 'none'}
+					stroke="currentColor"
+					stroke-width="2"
+					stroke-linecap="round"
+					stroke-linejoin="round"
+				>
+					<path
+						d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"
+					/>
+				</svg>
+				{#if likes > 0}
+					<span class="text-[0.68rem] font-semibold text-inherit">{likes.toLocaleString()}</span>
+				{/if}
+			</button>
+		</div>
 	{/if}
 
 	<!-- Unlike confirmation modal -->

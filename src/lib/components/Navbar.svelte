@@ -1,11 +1,14 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import { slide } from 'svelte/transition';
+	import { cubicOut } from 'svelte/easing';
 	import logo from '$lib/assets/logo.png';
 	import AuthService from '$lib/data/services/auth';
 	import { authUserStore } from '$lib/data/stores/authUser';
 	import { connect, joinRoom } from '$lib/data/stores/multiplayer';
 	import { saveGuestName, getGuestId, type PlayerIdentity } from '$lib/utils/guest-identity';
 	import GuestNameModal from '$lib/components/GuestNameModal.svelte';
+	import Avatar from '$lib/components/Avatar.svelte';
 
 	let mobileMenuOpen = $state(false);
 	let joinCode = $state('');
@@ -88,12 +91,12 @@
 		</a>
 
 		<!-- Desktop links -->
-		<ul class="hidden items-center gap-sm md:flex" role="list">
+		<ul class="hidden items-center gap-sm lg:flex" role="list">
 			{#each navLinks as link}
 				<li>
 					<a
 						href={link.href}
-						class="rounded-full px-sm py-xs text-sm font-medium text-gray-700 transition-colors
+						class="rounded-full px-sm py-xs text-sm font-medium whitespace-nowrap text-gray-700 transition-colors
                                hover:bg-primary-100 hover:text-primary-500
                                focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:outline-none"
 					>
@@ -104,7 +107,7 @@
 		</ul>
 
 		<!-- Desktop CTA -->
-		<div class="hidden items-center gap-sm md:flex">
+		<div class="hidden items-center gap-sm lg:flex">
 			<!-- Join multiplayer room by code -->
 			<div class="flex items-center overflow-hidden rounded-full border border-primary-300 bg-white">
 				<input
@@ -119,7 +122,7 @@
 					type="button"
 					onclick={handleJoinRoom}
 					disabled={joining || !isValidCode(joinCode.trim())}
-					class="flex items-center justify-center bg-primary-500 px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-primary-400 disabled:cursor-not-allowed disabled:bg-btn-primary-disabled"
+					class="flex shrink-0 items-center justify-center bg-primary-500 px-3 whitespace-nowrap py-1.5 text-sm font-medium text-white transition-colors hover:bg-primary-400 disabled:cursor-not-allowed disabled:bg-btn-primary-disabled"
 				>
 					{#if joining}
 						<svg class="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -135,10 +138,15 @@
 				<div class="flex items-center gap-3">
 					<a
 						href={`/profile/${$authUserStore.user.id}`}
-						class="flex items-center gap-2 rounded-full border border-primary-300 bg-primary-100 px-3 py-1.5 text-sm text-primary-600
+						class="flex items-center gap-2 rounded-full border border-primary-300 bg-primary-100 py-1 pr-3 pl-1 text-sm text-primary-600
                                hover:bg-primary-200 focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:outline-none"
 					>
-						<span class="h-2 w-2 rounded-full bg-primary-500"></span>
+						<Avatar
+							url={$authUserStore.user.avatarUrl}
+							crop={$authUserStore.user.avatarCrop}
+							name={$authUserStore.user.username}
+							class="h-6 w-6 text-[0.65rem]"
+						/>
 						<span class="font-medium">{$authUserStore.user.username}</span>
 					</a>
 					<button
@@ -172,53 +180,35 @@
 		<!-- Mobile hamburger -->
 		<button
 			class="flex items-center justify-center rounded-full p-xs text-primary-500 transition-colors
-                   hover:bg-primary-100 focus-visible:ring-2 focus-visible:ring-focus focus-visible:outline-none md:hidden"
+                   hover:bg-primary-100 focus-visible:ring-2 focus-visible:ring-focus focus-visible:outline-none lg:hidden"
 			onclick={() => (mobileMenuOpen = !mobileMenuOpen)}
 			aria-label="Toggle menu"
 			aria-expanded={mobileMenuOpen}
 		>
-			{#if mobileMenuOpen}
-				<svg
-					xmlns="http://www.w3.org/2000/svg"
-					width="22"
-					height="22"
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					aria-hidden="true"
-				>
-					<line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-				</svg>
-			{:else}
-				<svg
-					xmlns="http://www.w3.org/2000/svg"
-					width="22"
-					height="22"
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2"
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					aria-hidden="true"
-				>
-					<line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="6" x2="21" y2="6" /><line
-						x1="3"
-						y1="18"
-						x2="21"
-						y2="18"
-					/>
-				</svg>
-			{/if}
+			<!-- Three bars that morph into an X -->
+			<span class="relative block h-[22px] w-[22px]" aria-hidden="true">
+				{#each ['top-[5px]', 'top-[10px]', 'top-[15px]'] as pos, i}
+					<span
+						class="absolute left-[3px] h-0.5 w-4 rounded-full bg-current transition-all duration-300 ease-out {pos}
+							{mobileMenuOpen
+							? i === 0
+								? 'translate-y-[5px] rotate-45'
+								: i === 1
+									? 'scale-x-0 opacity-0'
+									: '-translate-y-[5px] -rotate-45'
+							: ''}"
+					></span>
+				{/each}
+			</span>
 		</button>
 	</nav>
 
 	<!-- Mobile menu -->
 	{#if mobileMenuOpen}
-		<div class="border-t border-primary-200/60 bg-primary-100/90 px-lg py-md backdrop-blur-md md:hidden">
+		<div
+			class="border-t border-primary-200/60 bg-primary-100/90 px-lg py-md backdrop-blur-md lg:hidden"
+			transition:slide={{ duration: 280, easing: cubicOut }}
+		>
 			<ul class="flex flex-col gap-md" role="list">
 				{#each navLinks as link}
 					<li>
@@ -238,14 +228,14 @@
 							bind:value={joinCode}
 							maxlength="6"
 							placeholder="รหัสห้อง"
-							class="w-full bg-transparent px-3 py-2 text-sm text-gray-700 outline-none placeholder:text-gray-400"
+							class="w-full min-w-0 bg-transparent px-3 py-2 text-sm text-gray-700 outline-none placeholder:text-gray-400"
 							onkeydown={(e) => e.key === 'Enter' && handleJoinRoom()}
 						/>
 						<button
 							type="button"
 							onclick={handleJoinRoom}
 							disabled={joining || !isValidCode(joinCode.trim())}
-							class="flex items-center justify-center bg-primary-500 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-primary-400 disabled:cursor-not-allowed disabled:bg-btn-primary-disabled"
+							class="flex shrink-0 items-center justify-center bg-primary-500 px-3 whitespace-nowrap py-2 text-sm font-medium text-white transition-colors hover:bg-primary-400 disabled:cursor-not-allowed disabled:bg-btn-primary-disabled"
 						>
 							{#if joining}
 								<svg class="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -264,7 +254,12 @@
 							<div
 								class="flex items-center gap-2 rounded-2xl border border-primary-300 bg-primary-100 px-4 py-3 text-sm text-primary-600"
 							>
-								<span class="h-2 w-2 rounded-full bg-primary-500"></span>
+								<Avatar
+									url={$authUserStore.user.avatarUrl}
+									crop={$authUserStore.user.avatarCrop}
+									name={$authUserStore.user.username}
+									class="h-7 w-7 text-xs"
+								/>
 								<span class="font-medium">@{$authUserStore.user.username}</span>
 							</div>
 							<button
