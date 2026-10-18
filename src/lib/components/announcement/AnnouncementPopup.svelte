@@ -16,11 +16,19 @@
 	} = $props();
 
 	const tone = $derived(TONE_STYLES[announcement.tone] ?? TONE_STYLES.info);
+
+	// Pages wrap content in animate-game-enter, whose leftover transform makes `fixed` relative to
+	// that wrapper instead of the viewport — mount the overlay on <body> so it centers on screen.
+	function portal(node: HTMLElement) {
+		document.body.appendChild(node);
+		return { destroy: () => node.remove() };
+	}
 </script>
 
 <svelte:window onkeydown={(e) => e.key === 'Escape' && onClose()} />
 
 <div
+	use:portal
 	class="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
 	role="presentation"
 	onclick={(e) => e.target === e.currentTarget && onClose()}
