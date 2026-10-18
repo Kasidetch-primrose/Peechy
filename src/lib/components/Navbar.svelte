@@ -136,6 +136,15 @@
 			</div>
 			{#if $authUserStore.user}
 				<div class="flex items-center gap-3">
+					{#if $authUserStore.user.isAdmin}
+						<a
+							href="/admin"
+							class="rounded-full border border-primary-300 bg-white px-md py-xs text-sm font-medium whitespace-nowrap text-primary-600
+                                   hover:bg-primary-100 focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:outline-none"
+						>
+							CMS
+						</a>
+					{/if}
 					<a
 						href={`/profile/${$authUserStore.user.id}`}
 						class="flex items-center gap-2 rounded-full border border-primary-300 bg-primary-100 py-1 pr-3 pl-1 text-sm text-primary-600
@@ -262,6 +271,15 @@
 								/>
 								<span class="font-medium">@{$authUserStore.user.username}</span>
 							</div>
+							{#if $authUserStore.user.isAdmin}
+								<a
+									href="/admin"
+									class="rounded-full border border-primary-300 bg-white px-md py-sm text-center text-sm font-medium text-primary-600 hover:bg-primary-100"
+									onclick={() => (mobileMenuOpen = false)}
+								>
+									CMS จัดการประกาศ
+								</a>
+							{/if}
 							<button
 								type="button"
 								onclick={handleLogout}

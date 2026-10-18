@@ -64,6 +64,13 @@
       "when": 1792318711659,
       "tag": "0008_add_user_avatar",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1792331160889,
+      "tag": "0009_announcements",
+      "breakpoints": true
     }
   ]
 }

@@ -5,6 +5,7 @@
 	import ArtworkCard, { type IArtworkCard } from '$lib/components/ArtworkCard.svelte';
 	import ArtworkCardSkeleton from '$lib/components/ArtworkCardSkeleton.svelte';
 	import HomeHeader from '$lib/components/HomeHeader.svelte';
+	import HomeAnnouncements from '$lib/components/announcement/HomeAnnouncements.svelte';
 	import GameService from '$lib/data/services/game';
 	import type { IGame } from '$lib/data/interface/game';
 	import { authUserStore } from '$lib/data/stores/authUser';
@@ -66,6 +67,9 @@
 <main class="animate-game-enter min-h-screen bg-transparent">
 	<!-- ! ! HomeHeader -->
 	<!-- ! ! <HomeHeader /> -->
+
+	<!-- ! ! Announcements (managed in /admin) -->
+	<HomeAnnouncements />
 
 	<!-- ! ! Games section -->
 	<section id="games" class="mx-auto max-w-6xl px-lg pt-2xl pb-xl">

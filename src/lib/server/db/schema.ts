@@ -6,3 +6,4 @@ export * from './ImageHintsModel';
 export * from './MultiplayerModel';
 export * from './auth.schema';
 export * from './ArtworksModel';
+export * from './AnnouncementsModel';
