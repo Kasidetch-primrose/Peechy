@@ -8,6 +8,19 @@ export default class UserService {
 		return res.json();
 	}
 
+	/** Edits the logged-in user's display name and/or username. */
+	static async updateProfile(data: {
+		name?: string | null;
+		username?: string;
+	}): Promise<Partial<ISingleResponse<IPublicUser>> & IStatusResponse> {
+		const res = await authFetch('/api/users/me', {
+			method: 'PATCH',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify(data)
+		});
+		return res.json();
+	}
+
 	/** Uploads a new picture and the circle position chosen for it. */
 	static async uploadAvatar(
 		file: Blob,

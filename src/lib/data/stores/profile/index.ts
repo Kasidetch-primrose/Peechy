@@ -76,7 +76,12 @@ export async function loadProfileUser(userId: number) {
 		const user = res.status === 'success' ? res.doc : null;
 		profileUserStore.set({ loading: false, user });
 		if (user && get(authUserStore).user?.id === user.id) {
-			patchAuthUser({ name: user.name, avatarUrl: user.avatarUrl, avatarCrop: user.avatarCrop });
+			patchAuthUser({
+				name: user.name,
+				username: user.username,
+				avatarUrl: user.avatarUrl,
+				avatarCrop: user.avatarCrop
+			});
 		}
 	} catch {
 		profileUserStore.set({ loading: false, user: null });
@@ -110,6 +115,22 @@ export const updateAvatarCrop = (crop: IAvatarCrop) =>
 	withLogin(() => UserService.updateAvatarCrop(crop));
 
 export const removeAvatar = () => withLogin(() => UserService.removeAvatar());
+
+/** Saves the owner's name / username; returns an error message ('' on success). */
+export async function updateProfile(data: { name: string | null; username: string }) {
+	if (!get(authUserStore).accessToken) return 'กรุณาเข้าสู่ระบบอีกครั้ง';
+	try {
+		const res = await UserService.updateProfile(data);
+		if (res.error === 'Unauthorized') return 'เซสชันหมดอายุ กรุณาเข้าสู่ระบบอีกครั้ง';
+		if (res.status !== 'success' || !res.doc) return res.error ?? 'บันทึกไม่สำเร็จ';
+		const { name, username } = res.doc;
+		profileUserStore.update((s) => (s.user ? { ...s, user: { ...s.user, name, username } } : s));
+		patchAuthUser({ name, username });
+		return '';
+	} catch {
+		return 'เชื่อมต่อเซิร์ฟเวอร์ไม่สำเร็จ';
+	}
+}
 
 export function setActiveTab(tab: ProfileTab) {
 	profileStore.update((s) => ({ ...s, activeTab: tab }));

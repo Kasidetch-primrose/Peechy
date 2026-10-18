@@ -12,6 +12,12 @@ export interface IAvatarCrop {
 	aspect: number;
 }
 
+/** Rules for editing a profile (checked on the server too). Any characters are allowed. */
+export const USERNAME_MAX_LENGTH = 30;
+export const NAME_MAX_LENGTH = 50;
+/** Invisible control characters (newlines, tabs, NUL, …) — the only thing refused in names. */
+export const hasControlChars = (s: string) => /[\u0000-\u001f\u007f-\u009f]/.test(s);
+
 export interface IPublicUser {
 	id: number;
 	username: string;

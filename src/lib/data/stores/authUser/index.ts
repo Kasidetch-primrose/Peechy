@@ -129,7 +129,12 @@ export async function syncAuthUserProfile() {
 		if (!res.ok) return;
 		const { doc } = await res.json();
 		if (doc && get(authUserStore).user?.id === doc.id) {
-			patchAuthUser({ name: doc.name, avatarUrl: doc.avatarUrl, avatarCrop: doc.avatarCrop });
+			patchAuthUser({
+				name: doc.name,
+				username: doc.username,
+				avatarUrl: doc.avatarUrl,
+				avatarCrop: doc.avatarCrop
+			});
 		}
 	} catch {
 		// offline / server down — keep the cached user

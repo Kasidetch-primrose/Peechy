@@ -269,7 +269,7 @@
 									name={$authUserStore.user.username}
 									class="h-7 w-7 text-xs"
 								/>
-								<span class="font-medium">@{$authUserStore.user.username}</span>
+								<span class="font-medium">{$authUserStore.user.username}</span>
 							</div>
 							{#if $authUserStore.user.isAdmin}
 								<a

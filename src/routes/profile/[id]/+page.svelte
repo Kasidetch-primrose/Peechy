@@ -17,10 +17,15 @@
 		updateAvatarCrop,
 		removeAvatar,
 		setActiveTab,
+		updateProfile,
 		logout
 	} from '$lib/data/stores/profile';
 	import { downscaleAvatarSource } from '$lib/utils/avatar';
-	import type { IAvatarCrop } from '$lib/data/interface/user';
+	import {
+		NAME_MAX_LENGTH,
+		USERNAME_MAX_LENGTH,
+		type IAvatarCrop
+	} from '$lib/data/interface/user';
 
 	const profileId = $derived(Number(page.params.id));
 	// Derived so avatar/name patches to the auth store don't re-trigger the loaders below.
@@ -30,10 +35,11 @@
 	const profileUser = $derived($profileUserStore.user);
 	// The owner's cached session fills in while the public profile loads.
 	const avatarSource = $derived(profileUser ?? (isOwner ? $authUserStore.user : null));
-	const displayName = $derived(
-		isOwner && $authUserStore.user
-			? ($authUserStore.user.name ?? $authUserStore.user.username)
-			: (profileUser?.name ?? profileUser?.username ?? null)
+	// The username is the headline; the optional display name sits under it.
+	const shownUser = $derived(isOwner && $authUserStore.user ? $authUserStore.user : profileUser);
+	const displayName = $derived(shownUser?.username ?? null);
+	const subName = $derived(
+		shownUser?.name && shownUser.name !== shownUser.username ? shownUser.name : null
 	);
 
 	// ── Profile picture (owner only) ────────────────────────────────────────────
@@ -125,6 +131,37 @@
 		if (avatarMenuOpen && avatarMenu && !avatarMenu.contains(e.target as Node)) {
 			avatarMenuOpen = false;
 		}
+	}
+
+	// ── Name / username (owner only) ────────────────────────────────────────────
+	let editingProfile = $state(false);
+	let nameDraft = $state('');
+	let usernameDraft = $state('');
+	let profileSaving = $state(false);
+	let profileError = $state('');
+
+	function startEditProfile() {
+		const user = $authUserStore.user;
+		if (!user) return;
+		nameDraft = user.name ?? '';
+		usernameDraft = user.username;
+		profileError = '';
+		editingProfile = true;
+	}
+
+	async function saveProfile(e: SubmitEvent) {
+		e.preventDefault();
+		const user = $authUserStore.user;
+		if (!user) return;
+		const username = usernameDraft.trim();
+		if (!username) {
+			profileError = 'กรุณาใส่ชื่อผู้ใช้';
+			return;
+		}
+		profileSaving = true;
+		profileError = await updateProfile({ name: nameDraft.trim() || null, username });
+		profileSaving = false;
+		if (!profileError) editingProfile = false;
 	}
 
 	// ── Full-picture viewer (anyone) ────────────────────────────────────────────
@@ -304,13 +341,90 @@
 
 				<!-- Info -->
 				<div class="flex-1 text-center sm:text-left">
-					{#if isOwner && $authUserStore.user}
-						<h1 class="text-2xl font-bold text-gray-900">{displayName}</h1>
-						<p class="mt-xs text-sm text-gray-500">@{$authUserStore.user.username}</p>
+					{#if isOwner && $authUserStore.user && editingProfile}
+						<form onsubmit={saveProfile} class="mx-auto flex max-w-[24rem] flex-col gap-sm text-left sm:mx-0">
+							<div>
+								<label for="profile-username" class="mb-xs block text-xs font-medium text-gray-700">
+									ชื่อผู้ใช้
+								</label>
+								<input
+									id="profile-username"
+									bind:value={usernameDraft}
+									maxlength={USERNAME_MAX_LENGTH}
+									autocomplete="username"
+									spellcheck="false"
+									class="w-full rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm text-gray-700 outline-none focus:border-primary-400"
+								/>
+								<p class="mt-xs text-xs text-gray-400">
+									ใช้ตัวอักษรอะไรก็ได้ เว้นวรรคได้ ยาวไม่เกิน {USERNAME_MAX_LENGTH} ตัว และต้องไม่ซ้ำกับคนอื่น
+								</p>
+							</div>
+							<div>
+								<label for="profile-name" class="mb-xs block text-xs font-medium text-gray-700">
+									ชื่อที่แสดง <span class="font-normal text-gray-400">(ไม่บังคับ)</span>
+								</label>
+								<input
+									id="profile-name"
+									bind:value={nameDraft}
+									maxlength={NAME_MAX_LENGTH}
+									autocomplete="nickname"
+									class="w-full rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm text-gray-700 outline-none focus:border-primary-400"
+								/>
+							</div>
+							{#if profileError}
+								<p class="text-sm text-red-500">{profileError}</p>
+							{/if}
+							<div class="flex gap-sm">
+								<button
+									type="button"
+									onclick={() => (editingProfile = false)}
+									class="flex-1 rounded-xl border border-gray-200 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+								>
+									ยกเลิก
+								</button>
+								<button
+									type="submit"
+									disabled={profileSaving || !usernameDraft.trim()}
+									class="flex-1 rounded-xl bg-primary-500 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-400 disabled:cursor-not-allowed disabled:opacity-50"
+								>
+									{profileSaving ? 'กำลังบันทึก...' : 'บันทึก'}
+								</button>
+							</div>
+						</form>
+					{:else if isOwner && $authUserStore.user}
+						<div class="flex items-center justify-center gap-sm sm:justify-start">
+							<h1 class="text-2xl font-bold break-words text-gray-900">{displayName}</h1>
+							<button
+								type="button"
+								onclick={startEditProfile}
+								aria-label="แก้ไขชื่อและชื่อผู้ใช้"
+								title="แก้ไขชื่อและชื่อผู้ใช้"
+								class="flex h-8 w-8 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-primary-100 hover:text-primary-600 focus-visible:ring-2 focus-visible:ring-focus focus-visible:outline-none"
+							>
+								<svg
+									viewBox="0 0 24 24"
+									class="h-4 w-4"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									aria-hidden="true"
+								>
+									<path d="M12 20h9" />
+									<path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
+								</svg>
+							</button>
+						</div>
+						{#if subName}
+							<p class="mt-xs text-sm text-gray-500">{subName}</p>
+						{/if}
 						<p class="mt-2xs text-sm text-gray-400">{$authUserStore.user.email}</p>
 					{:else if profileUser}
-						<h1 class="text-2xl font-bold text-gray-900">{displayName}</h1>
-						<p class="mt-xs text-sm text-gray-500">@{profileUser.username}</p>
+						<h1 class="text-2xl font-bold break-words text-gray-900">{displayName}</h1>
+						{#if subName}
+							<p class="mt-xs text-sm text-gray-500">{subName}</p>
+						{/if}
 					{:else if $profileUserStore.loading}
 						<div class="mx-auto h-7 w-40 animate-pulse rounded-lg bg-primary-100/70 sm:mx-0"></div>
 					{:else}
