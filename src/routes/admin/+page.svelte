@@ -302,6 +302,9 @@
 									oninput={(e) => (form.linkUrl = e.currentTarget.value || null)}
 									placeholder="/games หรือ https://..."
 								/>
+								<p class="mt-1 text-xs text-gray-400">
+									ใส่ <button type="button" class="font-mono text-primary-600 underline" onclick={() => (form.linkUrl = '/profile/me')}>/profile/me</button> เพื่อพาผู้ใช้ไปหน้าโปรไฟล์ของตัวเอง
+								</p>
 							</div>
 							<div>
 								<label class={labelClass} for="ann-link-label">ข้อความปุ่ม</label>
