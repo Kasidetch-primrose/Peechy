@@ -280,7 +280,9 @@ export async function login(email: string, password: string) {
 			email: user.email,
 			username: user.username,
 			name: user.name,
-			isAdmin: user.isAdmin
+			isAdmin: user.isAdmin,
+			avatarUrl: user.avatarUrl,
+			avatarCrop: user.avatarCrop
 		}
 	};
 }
@@ -377,6 +379,8 @@ export async function loginWithOAuth(
 				username: users.username,
 				name: users.name,
 				isAdmin: users.isAdmin,
+				avatarUrl: users.avatarUrl,
+				avatarCrop: users.avatarCrop,
 				deletedAt: users.deletedAt
 			})
 			.from(users)
@@ -403,7 +407,9 @@ export async function loginWithOAuth(
 				email: user.email,
 				username: user.username,
 				name: user.name,
-				isAdmin: user.isAdmin
+				isAdmin: user.isAdmin,
+				avatarUrl: user.avatarUrl,
+				avatarCrop: user.avatarCrop
 			}
 		};
 	}
@@ -435,7 +441,9 @@ export async function loginWithOAuth(
 					email: existingUser.email,
 					username: existingUser.username,
 					name: existingUser.name,
-					isAdmin: existingUser.isAdmin
+					isAdmin: existingUser.isAdmin,
+					avatarUrl: existingUser.avatarUrl,
+					avatarCrop: existingUser.avatarCrop
 				}
 			};
 		}
@@ -492,7 +500,9 @@ export async function loginWithOAuth(
 			email: newUser.email,
 			username: newUser.username,
 			name: newUser.name,
-			isAdmin: false
+			isAdmin: false,
+			avatarUrl: null,
+			avatarCrop: null
 		}
 	};
 }

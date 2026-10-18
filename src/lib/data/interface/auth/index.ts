@@ -1,3 +1,5 @@
+import type { IAvatarCrop } from '$lib/data/interface/user';
+
 // ---------------------------------------------------------------------------
 // Request shapes
 // ---------------------------------------------------------------------------
@@ -29,6 +31,8 @@ export interface IAuthUser {
 	username: string;
 	name: string | null;
 	isAdmin?: boolean;
+	avatarUrl?: string | null;
+	avatarCrop?: IAvatarCrop | null;
 }
 
 export interface ILoginResponse {

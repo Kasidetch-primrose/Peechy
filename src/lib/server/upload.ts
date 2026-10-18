@@ -21,7 +21,10 @@ function extensionFromMime(mime: AllowedMime): string {
 	return map[mime];
 }
 
-export async function uploadImage(file: File): Promise<{ key: string; url: string }> {
+export async function uploadImage(
+	file: File,
+	folder = 'game-images'
+): Promise<{ key: string; url: string }> {
 	if (!isAllowedType(file.type)) {
 		throw new Error(`Invalid file type: ${file.type}. Allowed: png, jpeg, webp`);
 	}
@@ -35,7 +38,7 @@ export async function uploadImage(file: File): Promise<{ key: string; url: strin
 
 	const buffer = Buffer.from(await file.arrayBuffer());
 	const ext = extensionFromMime(file.type);
-	const key = `game-images/${randomUUID()}.${ext}`;
+	const key = `${folder}/${randomUUID()}.${ext}`;
 
 	await r2.send(
 		new PutObjectCommand({
@@ -59,6 +62,13 @@ export async function deleteImage(key: string): Promise<void> {
 			Key: key
 		})
 	);
+}
+
+/** Maps a public URL produced by uploadImage/putObject back to its R2 key (null if it is not ours). */
+export function keyFromPublicUrl(url: string): string | null {
+	const base = env.R2_PUBLIC_URL;
+	if (!base || !url.startsWith(`${base}/`)) return null;
+	return url.slice(base.length + 1);
 }
 
 /** Stores raw bytes at an exact key (used for published artworks) and returns the public URL. */

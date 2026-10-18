@@ -79,7 +79,7 @@
 </script>
 
 <div class="flex min-h-screen items-center justify-center bg-transparent px-4 py-12">
-	<div class="animate-game-enter w-full max-w-[36rem]">
+	<div class="w-full max-w-[36rem] animate-game-enter">
 		<!-- Brand -->
 		<div class="mb-8 text-center">
 			<div
@@ -95,12 +95,7 @@
 		<AnimatedCardShell>
 			<form onsubmit={handleSubmit} class="flex flex-col gap-4">
 				<!-- Name -->
-				<FloatingInput
-					id="name"
-					label="ชื่อที่แสดง (ไม่บังคับ)"
-					bind:value={name}
-					autocomplete="name"
-				/>
+				<FloatingInput id="name" label="ชื่อ (ไม่บังคับ)" bind:value={name} autocomplete="name" />
 
 				<!-- Username -->
 				<FloatingInput
@@ -171,11 +166,19 @@
 					/>
 					<span>
 						ฉันยอมรับ
-						<a href="/legal/terms" target="_blank" class="font-medium text-primary-500 hover:underline">
+						<a
+							href="/legal/terms"
+							target="_blank"
+							class="font-medium text-primary-500 hover:underline"
+						>
 							ข้อกำหนดการใช้งาน
 						</a>
 						และ
-						<a href="/legal/privacy" target="_blank" class="font-medium text-primary-500 hover:underline">
+						<a
+							href="/legal/privacy"
+							target="_blank"
+							class="font-medium text-primary-500 hover:underline"
+						>
 							นโยบายความเป็นส่วนตัว
 						</a>
 					</span>

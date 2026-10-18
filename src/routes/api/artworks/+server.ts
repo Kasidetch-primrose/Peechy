@@ -1,6 +1,6 @@
 import { json } from '@sveltejs/kit';
 import { randomUUID } from 'node:crypto';
-import { and, desc, eq, exists, inArray, isNull, or, sql } from 'drizzle-orm';
+import { and, desc, eq, exists, ilike, inArray, isNull, or, sql } from 'drizzle-orm';
 import { env } from '$env/dynamic/private';
 import { db } from '$lib/server/db';
 import { artworks, artworkCollaborators } from '$lib/server/db/ArtworksModel';
@@ -29,15 +29,19 @@ function pngSize(buf: Buffer): { width: number; height: number } | null {
 	return { width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) };
 }
 
-// GET /api/artworks?page=1&limit=24[&userId=5] — the gallery, newest first. With userId it
-// lists what that user created or helped draw (their profile gallery).
+// GET /api/artworks?page=1&limit=24[&userId=5][&search=text] — the gallery, newest first. With
+// userId it lists what that user created or helped draw (their profile gallery). With search it
+// keeps only artworks whose title contains the text (case-insensitive).
 export const GET: RequestHandler = async ({ url }) => {
 	try {
 		const page = Math.max(1, Number(url.searchParams.get('page')) || 1);
 		const limit = Math.min(48, Math.max(1, Number(url.searchParams.get('limit')) || 24));
 		const userId = Number(url.searchParams.get('userId'));
+		const search = (url.searchParams.get('search') ?? '').trim().slice(0, 100);
 		const where = and(
 			isNull(artworks.deletedAt),
+			// escape LIKE wildcards so "%" / "_" in the query are matched literally
+			search ? ilike(artworks.title, `%${search.replace(/[\\%_]/g, '\\$&')}%`) : undefined,
 			Number.isInteger(userId) && userId > 0
 				? or(
 						eq(artworks.creatorId, userId),

@@ -1,3 +1,5 @@
+import type { IAvatarCrop } from '$lib/data/interface/user';
+
 // ---------------------------------------------------------------------------
 // Entity types (mirrors Go model structs)
 // ---------------------------------------------------------------------------
@@ -10,6 +12,9 @@ export interface IGame {
 	description: string | null;
 	creatorId: number;
 	creatorToken?: string; // only present in the create response, never in GET responses
+	creatorUsername?: string | null; // in paginate / getOne responses; null when a guest made the game
+	creatorAvatarUrl?: string | null;
+	creatorAvatarCrop?: IAvatarCrop | null;
 	difficulty: string | null;
 	isPublic: boolean | null;
 	likes: number | null;

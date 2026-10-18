@@ -6,7 +6,8 @@ import {
 	integer,
 	timestamp,
 	primaryKey,
-	uniqueIndex
+	uniqueIndex,
+	jsonb
 } from 'drizzle-orm/pg-core';
 import { baseColumns } from './base';
 
@@ -17,7 +18,10 @@ export const users = pgTable('users', {
 	email: varchar('email', { length: 255 }).notNull().unique(),
 	password: text('password').notNull(),
 	isVerified: boolean('is_verified').default(false).notNull(),
-	isAdmin: boolean('is_admin').default(false).notNull()
+	isAdmin: boolean('is_admin').default(false).notNull(),
+	// Full (downscaled) uploaded picture; the circle shown everywhere is cut from it by avatarCrop.
+	avatarUrl: text('avatar_url'),
+	avatarCrop: jsonb('avatar_crop').$type<{ x: number; y: number; zoom: number; aspect: number }>()
 });
 
 export const userGameLikes = pgTable(

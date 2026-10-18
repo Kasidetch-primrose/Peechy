@@ -1,9 +1,11 @@
 import { goto } from '$app/navigation';
 import { derived, get, writable } from 'svelte/store';
-import { authUserStore } from '$lib/data/stores/authUser';
+import { authUserStore, patchAuthUser } from '$lib/data/stores/authUser';
 import AuthService from '$lib/data/services/auth';
 import GameService from '$lib/data/services/game';
+import UserService from '$lib/data/services/user';
 import type { IGame } from '$lib/data/interface/game';
+import type { IAvatarCrop, IAvatarResponse, IPublicUser } from '$lib/data/interface/user';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 export type ProfileTab = 'created' | 'liked';
@@ -26,17 +28,6 @@ const initial: ProfileState = {
 };
 
 export const profileStore = writable<ProfileState>({ ...initial });
-
-export const profileInitialsStore = derived(authUserStore, ($auth) => {
-	const user = $auth.user;
-	if (!user) return '';
-	return (user.name ?? user.username)
-		.split(' ')
-		.map((w) => w[0])
-		.slice(0, 2)
-		.join('')
-		.toUpperCase();
-});
 
 export const profileStatsStore = derived(profileStore, ($profile) => ({
 	totalLikes: $profile.games.reduce((sum, g) => sum + (g.likes ?? 0), 0),
@@ -71,6 +62,55 @@ export async function loadLikedGames(userId: number, viewerUserId?: number) {
 		profileStore.update((s) => ({ ...s, likedLoading: false }));
 	}
 }
+
+// ── Profile owner (public info + avatar) ──────────────────────────────────────
+export const profileUserStore = writable<{ loading: boolean; user: IPublicUser | null }>({
+	loading: true,
+	user: null
+});
+
+export async function loadProfileUser(userId: number) {
+	profileUserStore.set({ loading: true, user: null });
+	try {
+		const res = await UserService.getOne(userId);
+		const user = res.status === 'success' ? res.doc : null;
+		profileUserStore.set({ loading: false, user });
+		if (user && get(authUserStore).user?.id === user.id) {
+			patchAuthUser({ name: user.name, avatarUrl: user.avatarUrl, avatarCrop: user.avatarCrop });
+		}
+	} catch {
+		profileUserStore.set({ loading: false, user: null });
+	}
+}
+
+/** Applies an avatar API result to the profile + logged-in user; returns an error message ('' on success). */
+function applyAvatarResult(res: IAvatarResponse): string {
+	if (res.status !== 'success') return res.error ?? 'บันทึกรูปไม่สำเร็จ';
+	const patch = { avatarUrl: res.avatarUrl ?? null, avatarCrop: res.avatarCrop ?? null };
+	profileUserStore.update((s) => (s.user ? { ...s, user: { ...s.user, ...patch } } : s));
+	patchAuthUser(patch);
+	return '';
+}
+
+async function withAccessToken(fn: (token: string) => Promise<IAvatarResponse>): Promise<string> {
+	const { accessToken } = get(authUserStore);
+	if (!accessToken) return 'กรุณาเข้าสู่ระบบอีกครั้ง';
+	try {
+		const res = await fn(accessToken);
+		if (res.error === 'Unauthorized') return 'เซสชันหมดอายุ กรุณาเข้าสู่ระบบอีกครั้ง';
+		return applyAvatarResult(res);
+	} catch {
+		return 'เชื่อมต่อเซิร์ฟเวอร์ไม่สำเร็จ';
+	}
+}
+
+export const uploadAvatar = (file: Blob, crop: IAvatarCrop) =>
+	withAccessToken((t) => UserService.uploadAvatar(file, crop, t));
+
+export const updateAvatarCrop = (crop: IAvatarCrop) =>
+	withAccessToken((t) => UserService.updateAvatarCrop(crop, t));
+
+export const removeAvatar = () => withAccessToken((t) => UserService.removeAvatar(t));
 
 export function setActiveTab(tab: ProfileTab) {
 	profileStore.update((s) => ({ ...s, activeTab: tab }));

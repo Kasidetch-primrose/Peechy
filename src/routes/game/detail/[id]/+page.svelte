@@ -11,6 +11,7 @@
 		difficultyBg
 	} from '$lib/data/stores/game-detail';
 	import { authUserStore } from '$lib/data/stores/authUser';
+	import Avatar from '$lib/components/Avatar.svelte';
 	// ── "เล่นหลายคน" (create multiplayer room) logic — commented out while
 	// realtime-server (Railway) is offline. To restore: uncomment this import
 	// block, the state + functions block below, and swap the disabled button +
@@ -109,23 +110,24 @@
 </script>
 
 {#if $gameDetailStore.loading}
-	<div style="height: {availableHeight}" class="flex items-center justify-center bg-transparent">
-		<div class="flex flex-col items-center gap-3 text-primary-500">
-			<svg
-				class="h-8 w-8 animate-spin"
-				xmlns="http://www.w3.org/2000/svg"
-				fill="none"
-				viewBox="0 0 24 24"
-			>
-				<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"
-				></circle>
-				<path
-					class="opacity-75"
-					fill="currentColor"
-					d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-				></path>
-			</svg>
-			<span class="text-sm">กำลังโหลดเกม...</span>
+	<!-- Skeleton mirroring the detail layout -->
+	<div style="height: {availableHeight}" class="overflow-hidden bg-transparent" aria-busy="true">
+		<div class="mx-auto flex h-full max-w-4xl flex-col gap-4 px-4 py-4">
+			<div class="h-5 w-20 animate-pulse rounded-md bg-primary-200/60"></div>
+			<div class="flex gap-4">
+				<div class="h-28 w-40 shrink-0 animate-pulse rounded-2xl bg-primary-200/60"></div>
+				<div class="flex flex-1 flex-col gap-2">
+					<div class="h-7 w-2/3 animate-pulse rounded-md bg-primary-200/60"></div>
+					<div class="h-4 w-full animate-pulse rounded-md bg-primary-200/60"></div>
+					<div class="h-4 w-4/5 animate-pulse rounded-md bg-primary-200/60"></div>
+					<div class="mt-1 h-9 w-32 animate-pulse rounded-full bg-primary-200/60"></div>
+				</div>
+			</div>
+			<div class="grid grid-cols-2 gap-3 sm:grid-cols-3">
+				{#each { length: 6 } as _}
+					<div class="aspect-[4/3] animate-pulse rounded-2xl bg-primary-200/60"></div>
+				{/each}
+			</div>
 		</div>
 	</div>
 {:else if $gameDetailStore.error}
@@ -236,6 +238,26 @@
 				<div class="flex flex-wrap items-start gap-2">
 					<h1 class="text-2xl font-bold text-gray-900 sm:text-3xl">{game.name}</h1>
 				</div>
+
+				<!-- ! Creator (skipped for games made by guests) -->
+				{#if game.creatorUsername}
+					<div class="flex min-w-0 items-center gap-2 text-sm text-gray-500">
+						โดย
+						<a
+							href={`/profile/${game.creatorId}`}
+							title={game.creatorUsername}
+							class="inline-flex min-w-0 items-center gap-2 rounded-full border border-primary-200 bg-white/70 py-1 pr-3 pl-1 font-medium text-gray-700 shadow-sm transition-colors hover:border-primary-300 hover:bg-white focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:outline-none"
+						>
+							<Avatar
+								url={game.creatorAvatarUrl}
+								crop={game.creatorAvatarCrop}
+								name={game.creatorUsername.charAt(0)}
+								class="h-6 w-6 text-xs"
+							/>
+							<span class="truncate">{game.creatorUsername}</span>
+						</a>
+					</div>
+				{/if}
 
 				<div class="flex flex-wrap items-center gap-2">
 					{#if game.difficulty}

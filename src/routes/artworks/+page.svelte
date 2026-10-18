@@ -1,124 +1,180 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-
-	interface ArtworkCard {
-		id: string;
-		title: string;
-		imageUrl: string;
-		thumbnailUrl: string | null;
-		canvasRatio: string;
-		creatorName: string;
-		publishedAt: string;
-		collaborators: number;
-	}
+	import PageBanner from '$lib/components/PageBanner.svelte';
+	import SearchBar from '$lib/components/SearchBar.svelte';
+	import ArtworkCard, { type IArtworkCard } from '$lib/components/ArtworkCard.svelte';
+	import ArtworkCardSkeleton from '$lib/components/ArtworkCardSkeleton.svelte';
 
 	const LIMIT = 24;
-	let items = $state<ArtworkCard[]>([]);
-	let page = $state(1);
+	let items = $state<IArtworkCard[]>([]);
+	let page = $state(0); // last page loaded
 	let pages = $state(1);
-	let loading = $state(true);
+	let loading = $state(false);
 	let error = $state('');
+	let sentinel = $state<HTMLDivElement | null>(null);
+	let total = $state(0);
 
-	async function load(next: number) {
+	// Search: `searchInput` is what's typed, `activeSearch` is what was submitted.
+	let searchInput = $state('');
+	let activeSearch = $state('');
+	// Bumped on every new search so late responses from an older query are ignored.
+	let requestId = 0;
+
+	const hasMore = $derived(page < pages);
+	const initialLoading = $derived(loading && items.length === 0);
+
+	async function loadMore() {
+		if (loading || !hasMore) return;
 		loading = true;
 		error = '';
+		const next = page + 1;
+		const myRequest = requestId;
 		try {
-			const res = await fetch(`/api/artworks?page=${next}&limit=${LIMIT}`);
+			const params = new URLSearchParams({ page: String(next), limit: String(LIMIT) });
+			if (activeSearch) params.set('search', activeSearch);
+			const res = await fetch(`/api/artworks?${params}`);
 			const data = await res.json();
+			if (myRequest !== requestId) return; // a newer search replaced this one
 			if (!res.ok || data.status !== 'success') throw new Error(data.error ?? 'load failed');
-			items = next === 1 ? data.docs : [...items, ...data.docs];
+			const seen = new Set(items.map((a) => a.id));
+			items = [...items, ...(data.docs as IArtworkCard[]).filter((a) => !seen.has(a.id))];
 			page = next;
 			pages = data.pages;
+			total = data.total ?? items.length;
 		} catch {
-			error = 'โหลดแกลเลอรีไม่สำเร็จ';
+			if (myRequest === requestId) error = 'โหลดแกลเลอรีไม่สำเร็จ';
 		} finally {
-			loading = false;
+			if (myRequest === requestId) loading = false;
 		}
 	}
 
-	onMount(() => void load(1));
+	// Triggered by the search button or Enter.
+	function runSearch() {
+		activeSearch = searchInput.trim();
+		requestId++;
+		items = [];
+		page = 0;
+		pages = 1;
+		total = 0;
+		error = '';
+		loading = false;
+		void loadMore();
+	}
 
-	const byline = (a: ArtworkCard) =>
-		a.collaborators > 1 ? `${a.creatorName} + ${a.collaborators - 1} คน` : a.creatorName;
+	function clearSearch() {
+		searchInput = '';
+		runSearch();
+	}
+
+	onMount(() => void loadMore());
+
+	// Lazy loading: observe the sentinel near the bottom. The observer is re-created after
+	// every load (reading `loading` / `page`) so a sentinel that is still on screen keeps
+	// triggering the next page until the viewport is filled or there are no more pages.
+	$effect(() => {
+		if (!sentinel || loading || error || !hasMore) return;
+		void page;
+		const observer = new IntersectionObserver(
+			(entries) => {
+				if (entries[0].isIntersecting) void loadMore();
+			},
+			{ rootMargin: '300px 0px' }
+		);
+		observer.observe(sentinel);
+		return () => observer.disconnect();
+	});
 </script>
 
 <svelte:head>
 	<title>แกลเลอรี · Peechy</title>
 </svelte:head>
 
-<div class="mx-auto w-full max-w-[72rem] px-4 py-10">
-	<!-- Big, hard-to-miss CTA: this is the actual entry point into Draw Together,
-	     the gallery page is just the front door now that the navbar points here. -->
-	<div
-		class="relative flex flex-col items-center gap-5 overflow-hidden rounded-3xl border border-primary-200 bg-linear-to-br from-primary-100 via-primary-50 to-white px-6 py-8 text-center shadow-md sm:flex-row sm:justify-between sm:text-left md:px-10 md:py-10"
-	>
-		<div
-			class="pointer-events-none absolute -top-10 -right-10 text-[9rem] leading-none opacity-10 select-none"
-			aria-hidden="true"
-		>
-			🎨
-		</div>
-		<div class="relative">
-			<h1 class="text-2xl font-bold text-gray-900 md:text-3xl">แกลเลอรีผลงาน</h1>
-			<p class="mt-1.5 text-sm text-gray-500 md:text-base">ผลงานที่ทุกคนช่วยกันวาดใน “วาดรูปด้วยกัน”</p>
-		</div>
-		<a
+{#snippet artworkSkeleton()}
+	<li aria-hidden="true"><ArtworkCardSkeleton /></li>
+{/snippet}
+
+<main class="min-h-screen animate-game-enter bg-transparent">
+	<section class="mx-auto max-w-6xl px-lg py-2xl">
+		<PageBanner
+			title="วาดรูปด้วยกัน"
+			subtitle={activeSearch && !loading
+				? `พบ ${total} ผลงานที่ตรงกับ “${activeSearch}”`
+				: 'ผลงานที่ทุกคนช่วยกันวาด'}
 			href="/game/draw"
-			class="group relative flex shrink-0 items-center gap-2 rounded-full bg-primary-500 px-7 py-3.5 text-base font-bold text-white shadow-lg shadow-primary-300/50 transition-all hover:-translate-y-0.5 hover:bg-primary-400 hover:shadow-xl hover:shadow-primary-300/60 active:scale-95"
-		>
-			<span class="absolute inset-0 -z-10 animate-ping rounded-full bg-primary-400/60"></span>
-			🎨 ไปวาดด้วยกัน
-			<span class="transition-transform group-hover:translate-x-1" aria-hidden="true">→</span>
-		</a>
-	</div>
+			cta="ไปวาดด้วยกัน"
+			ctaIcon="🎨"
+			bgIcon="🎨"
+		/>
 
-	{#if error}
-		<p class="mt-10 text-center text-sm text-red-500">{error}</p>
-	{:else if !loading && items.length === 0}
-		<p class="mt-16 text-center text-sm text-gray-400">ยังไม่มีผลงานที่เผยแพร่ — เป็นคนแรกเลย!</p>
-	{:else}
-		<ul class="mt-6 grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
-			{#each items as art (art.id)}
-				<li>
-					<a
-						href="/artworks/{art.id}"
-						class="group block overflow-hidden rounded-2xl border border-primary-100 bg-white shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
-					>
-						<div class="flex aspect-[4/3] items-center justify-center bg-gray-50">
-							<img
-								src={art.thumbnailUrl ?? art.imageUrl}
-								alt={art.title}
-								loading="lazy"
-								class="h-full w-full object-contain"
-							/>
-						</div>
-						<div class="px-3 py-2">
-							<p class="truncate text-sm font-semibold text-gray-900">{art.title}</p>
-							<p class="truncate text-xs text-gray-500">
-								{art.collaborators > 1 ? '👥' : '👤'}
-								{byline(art)}
-							</p>
-						</div>
-					</a>
-				</li>
-			{/each}
-			{#if loading}
-				{#each Array(4) as _, i (i)}
-					<li class="aspect-[4/3] animate-pulse rounded-2xl bg-gray-100"></li>
+		<SearchBar
+			bind:value={searchInput}
+			placeholder="ค้นหาชื่อผลงาน..."
+			disabled={loading && items.length === 0}
+			onsearch={runSearch}
+		/>
+
+		{#if initialLoading}
+			<ul class="mt-lg grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
+				{#each { length: 8 } as _}
+					{@render artworkSkeleton()}
 				{/each}
-			{/if}
-		</ul>
-
-		{#if !loading && page < pages}
-			<div class="mt-8 text-center">
+			</ul>
+		{:else if error && items.length === 0}
+			<div class="flex flex-col items-center gap-sm py-2xl text-center">
+				<p class="text-sm text-red-500">{error}</p>
 				<button
 					type="button"
-					onclick={() => load(page + 1)}
-					class="cursor-pointer rounded-full border border-primary-300 px-5 py-2 text-sm font-medium text-primary-600 transition-all hover:bg-primary-100/50 active:scale-95"
+					onclick={loadMore}
+					class="rounded-full bg-primary-500 px-lg py-sm text-sm font-medium text-white transition-colors hover:bg-primary-400"
 				>
-					โหลดเพิ่ม
+					ลองอีกครั้ง
 				</button>
 			</div>
+		{:else if !loading && items.length === 0}
+			<div class="mt-lg flex flex-col items-center gap-md py-2xl text-center">
+				<span class="text-5xl">🔍</span>
+				{#if activeSearch}
+					<p class="text-gray-700">ไม่พบผลงานที่ชื่อ “{activeSearch}”</p>
+					<button
+						type="button"
+						onclick={clearSearch}
+						class="rounded-full border border-primary-300 bg-primary-100 px-lg py-sm text-sm text-gray-700 transition-colors hover:border-primary-400 hover:text-primary-600"
+					>
+						ล้างการค้นหา
+					</button>
+				{:else}
+					<p class="text-gray-400">ยังไม่มีผลงานที่เผยแพร่ — เป็นคนแรกเลย!</p>
+				{/if}
+			</div>
+		{:else}
+			<ul class="mt-lg grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4">
+				{#each items as art (art.id)}
+					<li><ArtworkCard {art} /></li>
+				{/each}
+				{#if loading}
+					{#each { length: 4 } as _}
+						{@render artworkSkeleton()}
+					{/each}
+				{/if}
+			</ul>
+
+			{#if error}
+				<div class="flex flex-col items-center gap-sm py-xl text-center">
+					<p class="text-sm text-red-500">{error}</p>
+					<button
+						type="button"
+						onclick={loadMore}
+						class="rounded-full bg-primary-500 px-lg py-sm text-sm font-medium text-white transition-colors hover:bg-primary-400"
+					>
+						ลองอีกครั้ง
+					</button>
+				</div>
+			{:else if !hasMore && items.length > 0}
+				<p class="py-xl text-center text-sm text-gray-500">{activeSearch ? 'แสดงครบทุกผลการค้นหาแล้ว' : 'แสดงครบทุกผลงานแล้ว'} 🎨</p>
+			{/if}
 		{/if}
-	{/if}
-</div>
+
+		<!-- Sentinel for lazy loading -->
+		<div bind:this={sentinel} class="h-1" aria-hidden="true"></div>
+	</section>
+</main>

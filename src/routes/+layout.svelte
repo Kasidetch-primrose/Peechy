@@ -7,8 +7,14 @@
 	import Footer from '$lib/components/Footer.svelte';
 	import RulesFab from '$lib/components/RulesFab.svelte';
 	import GradientBackground from '$lib/components/ui/gradient-background.svelte';
+	import { syncAuthUserProfile } from '$lib/data/stores/authUser';
+	import { onMount } from 'svelte';
 
 	let { children } = $props();
+
+	onMount(() => {
+		void syncAuthUserProfile();
+	});
 </script>
 
 <svelte:head>
