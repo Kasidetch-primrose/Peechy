@@ -109,23 +109,24 @@
 </script>
 
 {#if $gameDetailStore.loading}
-	<div style="height: {availableHeight}" class="flex items-center justify-center bg-transparent">
-		<div class="flex flex-col items-center gap-3 text-primary-500">
-			<svg
-				class="h-8 w-8 animate-spin"
-				xmlns="http://www.w3.org/2000/svg"
-				fill="none"
-				viewBox="0 0 24 24"
-			>
-				<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"
-				></circle>
-				<path
-					class="opacity-75"
-					fill="currentColor"
-					d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-				></path>
-			</svg>
-			<span class="text-sm">กำลังโหลดเกม...</span>
+	<!-- Skeleton mirroring the detail layout -->
+	<div style="height: {availableHeight}" class="overflow-hidden bg-transparent" aria-busy="true">
+		<div class="mx-auto flex h-full max-w-4xl flex-col gap-4 px-4 py-4">
+			<div class="h-5 w-20 animate-pulse rounded-md bg-primary-200/60"></div>
+			<div class="flex gap-4">
+				<div class="h-28 w-40 shrink-0 animate-pulse rounded-2xl bg-primary-200/60"></div>
+				<div class="flex flex-1 flex-col gap-2">
+					<div class="h-7 w-2/3 animate-pulse rounded-md bg-primary-200/60"></div>
+					<div class="h-4 w-full animate-pulse rounded-md bg-primary-200/60"></div>
+					<div class="h-4 w-4/5 animate-pulse rounded-md bg-primary-200/60"></div>
+					<div class="mt-1 h-9 w-32 animate-pulse rounded-full bg-primary-200/60"></div>
+				</div>
+			</div>
+			<div class="grid grid-cols-2 gap-3 sm:grid-cols-3">
+				{#each { length: 6 } as _}
+					<div class="aspect-[4/3] animate-pulse rounded-2xl bg-primary-200/60"></div>
+				{/each}
+			</div>
 		</div>
 	</div>
 {:else if $gameDetailStore.error}

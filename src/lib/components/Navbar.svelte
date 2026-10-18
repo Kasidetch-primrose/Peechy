@@ -56,6 +56,7 @@
 	const navLinks = [
 		{ href: '/', label: 'หน้าหลัก' },
 		{ href: '/game/create', label: 'สร้างเกม' },
+		{ href: '/games', label: 'เปิดป้ายทายภาพ' },
 		{ href: '/artworks', label: 'วาดรูปด้วยกัน' }
 	];
 
