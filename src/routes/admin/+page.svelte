@@ -6,9 +6,12 @@
 	import { authUserStore } from '$lib/data/stores/authUser';
 	import {
 		ANNOUNCEMENT_DISPLAYS,
+		ANNOUNCEMENT_LIMIT_MAX,
 		ANNOUNCEMENT_TONES,
+		DEFAULT_ANNOUNCEMENT_SETTINGS,
 		type IAnnouncement,
-		type IAnnouncementInput
+		type IAnnouncementInput,
+		type IAnnouncementSettings
 	} from '$lib/data/interface/announcement';
 	import AnnouncementBanner from '$lib/components/announcement/AnnouncementBanner.svelte';
 	import AnnouncementPopup from '$lib/components/announcement/AnnouncementPopup.svelte';
@@ -64,6 +67,56 @@
 		if (a.startsAt && new Date(a.startsAt).getTime() > now)
 			return { label: 'ตั้งเวลาไว้', class: 'bg-sky-100 text-sky-800' };
 		return { label: 'กำลังแสดง', class: 'bg-emerald-100 text-emerald-800' };
+	}
+
+	// Live announcements past the limit wait their turn (the home page shows newest edits first).
+	const overLimit = $derived.by(() => {
+		const live = items
+			.filter((a) => statusOf(a).label === 'กำลังแสดง')
+			.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+		const banner = live.filter((a) => a.display !== 'popup').slice(settings.maxBanners);
+		const popup = live.filter((a) => a.display !== 'banner').slice(settings.maxPopups);
+		return { banner: new Set(banner.map((a) => a.id)), popup: new Set(popup.map((a) => a.id)) };
+	});
+
+	// ── Display limits ──
+	let settings = $state<IAnnouncementSettings>({ ...DEFAULT_ANNOUNCEMENT_SETTINGS });
+	let settingsDraft = $state<IAnnouncementSettings>({ ...DEFAULT_ANNOUNCEMENT_SETTINGS });
+	let savingSettings = $state(false);
+	const settingsDirty = $derived(
+		settingsDraft.maxBanners !== settings.maxBanners || settingsDraft.maxPopups !== settings.maxPopups
+	);
+
+	async function loadSettings() {
+		try {
+			const res = await AnnouncementService.getSettings();
+			if (res.status === 'success' && res.doc) {
+				settings = res.doc;
+				settingsDraft = { ...res.doc };
+			}
+		} catch {
+			// keep defaults; saving still works
+		}
+	}
+
+	async function saveSettings() {
+		savingSettings = true;
+		try {
+			const res = await AnnouncementService.saveSettings(settingsDraft);
+			if (res.status === 'success' && res.doc) {
+				settings = res.doc;
+				settingsDraft = { ...res.doc };
+				flash('บันทึกการตั้งค่าแล้ว');
+			} else flash(res.error ?? 'บันทึกไม่สำเร็จ');
+		} catch {
+			flash('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้');
+		} finally {
+			savingSettings = false;
+		}
+	}
+
+	function step(field: keyof IAnnouncementSettings, delta: number) {
+		settingsDraft[field] = Math.min(ANNOUNCEMENT_LIMIT_MAX, Math.max(0, settingsDraft[field] + delta));
 	}
 
 	function flash(msg: string) {
@@ -183,6 +236,7 @@
 			return;
 		}
 		load();
+		loadSettings();
 	});
 
 	const inputClass =
@@ -403,6 +457,58 @@
 			</section>
 		{/if}
 
+		<!-- Display limits -->
+		{#snippet limitStepper(field: keyof IAnnouncementSettings, label: string, hint: string)}
+			<div class="flex items-center justify-between gap-md rounded-2xl bg-gray-100/70 p-md">
+				<div class="min-w-0">
+					<p class="text-sm font-medium text-gray-900">{label}</p>
+					<p class="text-xs text-gray-700">{hint}</p>
+				</div>
+				<div class="flex shrink-0 items-center gap-2">
+					<button
+						type="button"
+						aria-label="ลด {label}"
+						disabled={settingsDraft[field] <= 0}
+						onclick={() => step(field, -1)}
+						class="h-9 w-9 rounded-full border border-primary-300 bg-white text-lg font-semibold text-primary-600 hover:bg-primary-100 disabled:opacity-40"
+					>
+						−
+					</button>
+					<span class="w-8 text-center text-lg font-bold text-gray-900">{settingsDraft[field]}</span>
+					<button
+						type="button"
+						aria-label="เพิ่ม {label}"
+						disabled={settingsDraft[field] >= ANNOUNCEMENT_LIMIT_MAX}
+						onclick={() => step(field, 1)}
+						class="h-9 w-9 rounded-full border border-primary-300 bg-white text-lg font-semibold text-primary-600 hover:bg-primary-100 disabled:opacity-40"
+					>
+						+
+					</button>
+				</div>
+			</div>
+		{/snippet}
+
+		<section class="mb-lg rounded-3xl bg-white/95 p-lg shadow-sm">
+			<div class="mb-md flex flex-wrap items-center justify-between gap-md">
+				<div>
+					<h2 class="text-lg font-semibold text-gray-900">จำนวนที่แสดงบนหน้าหลัก</h2>
+					<p class="text-sm text-gray-700">ประกาศที่แก้ไขล่าสุดจะได้แสดงก่อน ส่วนที่เกินจะรอคิว (0 = ไม่แสดงเลย)</p>
+				</div>
+				<button
+					type="button"
+					onclick={saveSettings}
+					disabled={!settingsDirty || savingSettings}
+					class="rounded-full bg-primary-500 px-lg py-sm text-sm font-semibold text-white transition-colors hover:bg-primary-400 disabled:cursor-not-allowed disabled:opacity-50"
+				>
+					{savingSettings ? 'กำลังบันทึก...' : 'บันทึกการตั้งค่า'}
+				</button>
+			</div>
+			<div class="grid gap-md sm:grid-cols-2">
+				{@render limitStepper('maxBanners', 'แถบประกาศสูงสุด', 'จำนวนแถบที่แสดงพร้อมกัน')}
+				{@render limitStepper('maxPopups', 'ป๊อปอัปสูงสุด', 'จำนวนป๊อปอัปที่เด้งต่อการเข้าเว็บหนึ่งครั้ง')}
+			</div>
+		</section>
+
 		<!-- List -->
 		{#if loadError}
 			<p class="mb-md rounded-xl bg-red-50 px-4 py-2 text-sm text-red-500">{loadError}</p>
@@ -431,6 +537,22 @@
 								<span class="rounded-full bg-primary-50 px-2.5 py-0.5 text-xs text-primary-600">
 									{DISPLAY_LABELS[a.display] ?? a.display}
 								</span>
+								{#if overLimit.banner.has(a.id)}
+									<span
+										class="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs text-amber-800"
+										title="เกินจำนวนแถบสูงสุด — จะแสดงเมื่อผู้ใช้ปิดแถบที่อยู่ก่อนหน้า"
+									>
+										แถบ: รอคิว
+									</span>
+								{/if}
+								{#if overLimit.popup.has(a.id)}
+									<span
+										class="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs text-amber-800"
+										title="เกินจำนวนป๊อปอัปต่อการเข้าเว็บ — จะเด้งในการเข้าเว็บครั้งถัดไปหลังผู้ใช้ปิดอันก่อนหน้า"
+									>
+										ป๊อปอัป: รอคิว
+									</span>
+								{/if}
 							</div>
 							<p class="mt-1 truncate font-semibold text-gray-900">{a.title}</p>
 							<p class="truncate text-sm text-gray-700">{a.message}</p>

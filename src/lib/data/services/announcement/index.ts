@@ -3,6 +3,7 @@ import type { IStatusResponse } from '$lib/data/interface/game';
 import type {
 	IAnnouncement,
 	IAnnouncementInput,
+	IAnnouncementSettings,
 	IPublicAnnouncement
 } from '$lib/data/interface/announcement';
 
@@ -10,9 +11,27 @@ type DocsResponse<T> = IStatusResponse & { docs?: T[] };
 type DocResponse<T> = IStatusResponse & { doc?: T };
 
 export default class AnnouncementService {
-	/** Live announcements for the home page. */
-	static async getActive(): Promise<DocsResponse<IPublicAnnouncement>> {
+	/** Live announcements + display limits for the home page. */
+	static async getActive(): Promise<
+		DocsResponse<IPublicAnnouncement> & { settings?: IAnnouncementSettings }
+	> {
 		const res = await fetch('/api/announcements');
+		return res.json();
+	}
+
+	static async getSettings(): Promise<DocResponse<IAnnouncementSettings>> {
+		const res = await authFetch('/api/admin/announcements/settings');
+		return res.json();
+	}
+
+	static async saveSettings(
+		settings: IAnnouncementSettings
+	): Promise<DocResponse<IAnnouncementSettings>> {
+		const res = await authFetch('/api/admin/announcements/settings', {
+			method: 'PUT',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify(settings)
+		});
 		return res.json();
 	}
 
