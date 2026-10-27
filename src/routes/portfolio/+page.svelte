@@ -10,6 +10,13 @@
 	const GITHUB_URL = 'https://github.com/Kasidetch-primrose/peechy';
 	const LINKEDIN_URL = 'https://www.linkedin.com/in/kasidetch-kongkaew-912a56280/';
 	const EMAIL = 'kasidetch.k@hotmail.com';
+	const PHONE = '098-929-8343';
+	const PHONE_TEL = '+66989298343';
+
+	const owner = {
+		name: { th: 'กษิดิ์เดช กองแก้ว', en: 'Kasidetch Kongkaew' },
+		nickname: { th: 'ต้า', en: 'Tar' }
+	};
 
 	let copied = $state(false);
 	let copyTimer: ReturnType<typeof setTimeout> | undefined;
@@ -494,7 +501,10 @@
 	<section class="mt-2xl">
 		<h2 class="mb-md text-2xl font-bold text-gray-900">{t(headings.contact)}</h2>
 		<div class="{card} p-lg sm:p-xl">
-			<p class="text-lg font-semibold text-gray-900">Kasidetch Kongkaew</p>
+			<p class="text-lg font-semibold text-gray-900">
+				{t(owner.name)} <span class="font-normal text-gray-700">({t(owner.nickname)})</span>
+			</p>
+			<p class="text-sm text-gray-400">{lang === 'th' ? owner.name.en : owner.name.th}</p>
 			<div class="mt-md flex flex-wrap items-center gap-sm">
 				<a href="mailto:{EMAIL}" class="break-all text-primary-600 hover:underline">{EMAIL}</a>
 				<button
@@ -505,6 +515,9 @@
 					{copied ? t(labels.copied) : t(labels.copy)}
 				</button>
 			</div>
+			<a href="tel:{PHONE_TEL}" class="mt-sm inline-block text-primary-600 hover:underline">
+				📞 {PHONE}
+			</a>
 			<div class="mt-md flex flex-wrap gap-sm">
 				<a
 					href={LINKEDIN_URL}
