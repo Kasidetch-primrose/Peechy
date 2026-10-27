@@ -516,7 +516,7 @@
 				</button>
 			</div>
 			<a href="tel:{PHONE_TEL}" class="mt-sm inline-block text-primary-600 hover:underline">
-				📞 {PHONE}
+				{PHONE}
 			</a>
 			<div class="mt-md flex flex-wrap gap-sm">
 				<a
