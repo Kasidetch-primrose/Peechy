@@ -50,7 +50,7 @@
 			icon: '🔲',
 			title: { th: 'เปิดป้าย', en: 'Reveal tiles' },
 			body: {
-				th: 'ภาพถูกซ่อนไว้ใต้ตาราง กดเปิดทีละช่องเพื่อดูบางส่วนของภาพ',
+				th: 'ภาพถูกซ่อนไว้ใต้แผ่นป้าย กดเปิดทีละช่องเพื่อดูบางส่วนของภาพ',
 				en: 'The picture is hidden under a grid. Open one tile at a time to see a piece of it.'
 			}
 		},
@@ -200,7 +200,7 @@
 			who: 'Claude',
 			icon: '🤖',
 			body: {
-				th: 'เขียนโค้ดส่วนใหญ่ตามที่ฉันสั่งและกำหนดทิศทาง',
+				th: 'เขียนโค้ดส่วนใหญ่และกำหนดทิศทางการพัฒนา',
 				en: 'Wrote most of the code, following my instructions and direction.'
 			}
 		},
@@ -208,7 +208,7 @@
 			who: 'ChatGPT',
 			icon: '💡',
 			body: {
-				th: 'ช่วยคิดโครงสร้างของระบบ',
+				th: 'ช่วยคิดโครงสร้างและแนวทางของระบบ',
 				en: 'Helped think through the system structure.'
 			}
 		}
@@ -216,13 +216,13 @@
 
 	const nextUp: Text[] = [
 		{ th: 'เปิดใช้โหมดเล่นกับเพื่อน', en: 'Launch play-with-friends mode' },
-		{ th: 'เพิ่มการ login ด้วย Facebook', en: 'Add Facebook login' },
+		// { th: 'เพิ่มการ login ด้วย Facebook', en: 'Add Facebook login' },
 		{ th: 'ทำระบบบัญชีให้ปลอดภัยขึ้น', en: 'Harden account security' },
 		{
 			th: 'ให้ห้องเล่นต่อได้แม้ server รีสตาร์ต',
 			en: 'Let rooms survive a server restart'
-		},
-		{ th: 'เพิ่ม automated tests', en: 'Add automated tests' }
+		}
+		// { th: 'เพิ่ม automated tests', en: 'Add automated tests' }
 	];
 
 	const stack: { name: string; body: Text }[] = [
