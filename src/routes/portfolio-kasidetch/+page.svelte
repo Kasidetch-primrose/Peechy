@@ -125,7 +125,7 @@
 			accent: '#C49A6C',
 			desc: {
 				th: 'แพลตฟอร์มสำหรับเลือกซื้อแพ็กเกจศัลยกรรมและหัตถการของโรงพยาบาลในเกาหลี มีเจ้าหน้าที่โรงพยาบาลและทีมแอดมินคอยแนะนำและให้บริการ ผ่อนชำระด้วยบัตรเครดิตก็ทำศัลยกรรมที่เกาหลีกับโรงพยาบาลชั้นนำได้ และมีระบบ Back Office สำหรับจัดการคำสั่งซื้อและคำขอต่าง ๆ',
-				en: 'A platform for choosing and buying cosmetic-surgery and procedure packages from hospitals in Korea. Hospital staff and an admin team guide customers, who can pay by credit card in instalments. A back office manages orders and requests.'
+				en: 'A platform for browsing and buying cosmetic-surgery and procedure packages from hospitals in Korea. Hospital staff and an admin team guide customers, who can pay by credit card in instalments. A back office manages orders and requests.'
 			},
 			platform: { th: 'มือถือ, เว็บ', en: 'Mobile, web' },
 			stack: ['Svelte', 'Flutter', 'Go', 'PostgreSQL', 'FCM', 'Beam'],
@@ -180,14 +180,14 @@
 			accent: '#E9B72E',
 			desc: {
 				th: 'แอปทะเบียนประวัติราชการ สำหรับข้าราชการใช้จัดเก็บและแก้ไขข้อมูลเกี่ยวกับงานราชการของตัวเอง มีฟังก์ชันสแกน QR code ลงเวลาเข้า-ออกงาน และมี social media สำหรับแจ้งประกาศหรือสอบถามปัญหาที่เกี่ยวข้อง',
-				en: 'A civil-service records app. Officials store and edit their own service data, scan a QR code to clock in and out, and use a social feed for announcements and questions.'
+				en: 'A civil-servant records app. Civil servants store and edit their own service data, scan a QR code to clock in and out, and use a community feed for announcements and questions.'
 			},
 			platform: { th: 'มือถือ', en: 'Mobile' },
 			stack: ['Flutter', 'GraphQL', 'WebRTC', 'FCM'],
 			features: [
 				{
 					th: 'ข้อมูลส่วนบุคคลและทะเบียนประวัติแบบอิเล็กทรอนิกส์',
-					en: 'Personal data and electronic service record'
+					en: 'Personal data and service record'
 				},
 				{ th: 'สแกน QR code ลงเวลาเข้า-ออกงาน', en: 'QR scan to clock in and out' },
 				{
@@ -222,7 +222,7 @@
 			accent: '#7B57C9',
 			desc: {
 				th: 'แอปเครื่องมืออำนวยความสะดวกสำหรับบันทึกข้อมูลชุมชนที่ไปสำรวจ มีเครื่องมือบันทึกข้อมูลหลายรูปแบบ เช่น ชื่อชุมชนและที่อยู่ในแผนที่ ผังเครือญาติ เหตุการณ์สำคัญหรือประวัติศาสตร์ และปฏิทินวันสำคัญของชุมชน',
-				en: 'A tool app for recording community data from field surveys. Tools cover community name and map location, kinship charts, key events and history, and a calendar of community days.'
+				en: 'Tools for recording community data from field surveys: community name and map location, kinship charts, key events and history, and a calendar of community days. For recording many aspects of data from the community'
 			},
 			platform: { th: 'มือถือ, เว็บ', en: 'Mobile, web' },
 			stack: ['Svelte', 'Flutter', 'FCM'],
@@ -240,7 +240,7 @@
 					th: 'เครื่องมือบันทึกข้อมูล: timeline ประวัติศาสตร์ชุมชน',
 					en: 'Data-recording tools: community history timeline'
 				},
-				{ th: 'แจ้งข่าวสารและอัปเดตโครงการ', en: 'Announcements and project updates' }
+				// { th: 'แจ้งข่าวสารและอัปเดตโครงการ', en: 'Announcements and project updates' }
 				// { th: 'แชทและการแจ้งเตือน', en: 'Chat and notifications' },
 				// {
 				// 	th: 'เก็บข้อมูลด่วนและนัดหมาย (เว็บ)',
@@ -494,8 +494,8 @@
 		about: { th: 'เกี่ยวกับฉัน', en: 'About me' },
 		skills: { th: 'ทำอะไรได้บ้าง', en: 'What I do' },
 		structure: {
-			th: 'โครงสร้างโค้ดที่ใช้เหมือนกันทุก stack',
-			en: 'The same structure on every stack'
+			th: 'Layered Architecture Principle',
+			en: 'Layered Architecture Principle'
 		},
 		projects: { th: 'โครงการ', en: 'Projects' },
 		caseStudy: { th: 'Peechy: เจาะลึก', en: 'Peechy: case study' },
