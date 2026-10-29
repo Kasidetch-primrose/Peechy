@@ -440,7 +440,7 @@
 					<div class="flex flex-col items-center gap-sm sm:items-end">
 						{#if $authUserStore.user?.isAdmin}
 							<a
-								href="/portfolio"
+								href="/portfolio-kasidetch"
 								class="rounded-lg border border-primary-300 px-md py-xs text-sm font-medium text-primary-600 transition-colors hover:bg-primary-50 focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:outline-none"
 							>
 								Portfolio
